@@ -394,7 +394,7 @@
 </section>
 
 <footer>
-  <p><strong>How day and night are split.</strong> A streak is the time between two interactions, on any device, and is never cut at a clock boundary. A streak counts as <em>night</em> if it overlaps 00:00&ndash;05:00 by 30+ minutes. The night then stretches back over any activity from 22:00 leading into that streak (your bedtime routine) and forward over any activity until 06:00 (waking up, checking your phone), so a 3am wake-up stays inside the night. Everything else is day: a screen-free 4&ndash;10pm stays a day streak even if you go to bed at 10:30. Streaks under 15 minutes are ignored in the tables above. A night is recognised once you&rsquo;ve been screen-free past about 00:30.</p>
+  <p><strong>How day and night are split.</strong> A streak is the time between two interactions, on any device, and is never cut at a clock boundary. A streak counts as <em>night</em> if it overlaps 00:00&ndash;05:00 by 30+ minutes. The night then stretches back over any activity from 22:30 (target bedtime) leading into that streak and forward over any activity until 06:45 (target wake time), so a 3am wake-up stays inside the night. Everything else is day: a screen-free 4&ndash;10pm stays a day streak even if you go to bed at 10:30. Streaks under 15 minutes are ignored in the tables above. A night is recognised once you&rsquo;ve been screen-free past about 00:30.</p>
   <p>&ldquo;Combined&rdquo; only counts a gap when <em>every</em> device was quiet, from when the last device began logging. Per-device figures are measured within the same day or night period; * = that device started logging partway through it. Monthly averages leave out the streak or night still in progress.</p>
   <p>Reads directly from your Google Sheet event log. Refreshes automatically every 2 minutes &middot;
   <button id="refresh-btn" type="button">Refresh now</button></p>
@@ -412,11 +412,12 @@
 
   // --- how day and night are split (tweak to suit your routine) ---------
   var MIN_STREAK_MS = 15 * 60000;   // shorter gaps are just normal use, not a "streak"
+  // Hours are decimal clock hours: 22.5 = 22:30, 6.75 = 06:45.
   var CORE_START_H = 0;             // hours after midnight in which you should definitely be asleep
   var CORE_END_H = 5;
   var MIN_CORE_MS = 30 * 60000;     // a gap is "sleep" once it overlaps the core hours by this much
-  var EVENING_START_H = 22;         // activity from this hour, leading into the sleep gap, joins the night
-  var MORNING_END_H = 6;            // activity before this hour, following the sleep gap, joins the night
+  var EVENING_START_H = 22.5;       // target bedtime: activity from here, leading into the sleep gap, joins the night
+  var MORNING_END_H = 6.75;         // target wake time: activity before here, following the sleep gap, joins the night
   var LEAGUE_ROWS = 10;
   var HISTORY_ROWS = 10;
 
@@ -494,6 +495,11 @@
   // --- streaks, nights and days -----------------------------------------
 
   function startOfDay(d){ var x = new Date(d); x.setHours(0,0,0,0); return x; }
+  function atHour(d, hours){
+    var x = new Date(d);
+    x.setHours(Math.floor(hours), Math.round((hours % 1) * 60), 0, 0);
+    return x;
+  }
   function sameDay(a, b){
     return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
   }
@@ -556,8 +562,9 @@
     var lastDay = startOfDay(now);
     for(; day <= lastDay; day.setDate(day.getDate() + 1)){
       var evening = new Date(day);
-      var coreStart = new Date(evening); coreStart.setDate(coreStart.getDate()+1); coreStart.setHours(CORE_START_H,0,0,0);
-      var coreEnd = new Date(evening); coreEnd.setDate(coreEnd.getDate()+1); coreEnd.setHours(CORE_END_H,0,0,0);
+      var nextDay = new Date(evening); nextDay.setDate(nextDay.getDate()+1);
+      var coreStart = atHour(nextDay, CORE_START_H);
+      var coreEnd = atHour(nextDay, CORE_END_H);
       var qualifying = candidates.filter(function(idx){
         var g = gaps[idx];
         if(g.night) return false;
@@ -565,8 +572,8 @@
       });
       if(!qualifying.length) continue;
 
-      var eveningFrom = new Date(evening); eveningFrom.setHours(EVENING_START_H,0,0,0);
-      var morningTo = new Date(evening); morningTo.setDate(morningTo.getDate()+1); morningTo.setHours(MORNING_END_H,0,0,0);
+      var eveningFrom = atHour(evening, EVENING_START_H);
+      var morningTo = atHour(nextDay, MORNING_END_H);
       var lo = qualifying[0], hi = qualifying[qualifying.length-1];
       while(lo > 0 && !gaps[lo-1].night && gaps[lo-1].start >= eveningFrom) lo--;
       while(hi < gaps.length-1 && gaps[hi+1].start < morningTo) hi++;

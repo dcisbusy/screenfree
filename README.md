@@ -22,8 +22,10 @@ Every interaction on any device is logged as a timestamp. A streak is the time b
 The dashboard works out where your night starts and ends from the data rather than from fixed clock times.
 
 1. A streak is **night** if it overlaps 00:00 to 05:00 by at least 30 minutes.
-2. The night then extends **back** over any activity from 22:00 leading into that streak (your bedtime routine), and **forward** over any activity until 06:00 (waking up, checking your phone). Interruptions in the middle, such as a 3am phone check, stay inside the night and are counted as interruptions.
-3. Everything else is **day**. A screen-free 4pm to 10pm therefore stays a day streak even if you go to bed at 10:30pm, because the 22:00 evening cut-off stops it being pulled into the night.
+2. The night then extends **back** over any activity from 22:30 (your target bedtime) leading into that streak, and **forward** over any activity until 06:45 (your target wake time, covering waking up and checking your phone). Interruptions in the middle, such as a 3am phone check, stay inside the night and are counted as interruptions.
+3. Everything else is **day**. A screen-free 4pm to 10pm therefore stays a day streak even if you go to bed at 10:30pm, because the 22:30 evening cut-off stops it being pulled into the night.
+
+The bedtime and wake time are targets, not your averages. Using a target means phone use after 22:30 counts against the night even if you usually fall asleep later, and waking later than 06:45 starts the day as soon as you are up.
 
 Streaks under 15 minutes are treated as normal use and ignored by the league table and monthly averages. Monthly averages also leave out the streak or night still in progress.
 
@@ -38,10 +40,10 @@ The rules are constants near the top of the script in `index.html`:
 | `MIN_STREAK_MS` | 15 min | Gaps shorter than this are not counted as streaks |
 | `CORE_START_H`, `CORE_END_H` | 0, 5 | Hours after midnight when you should definitely be asleep |
 | `MIN_CORE_MS` | 30 min | Overlap with the core hours needed for a gap to count as sleep |
-| `EVENING_START_H` | 22 | Activity from this hour, leading into sleep, joins the night |
-| `MORNING_END_H` | 6 | Activity before this hour, after sleep, joins the night |
+| `EVENING_START_H` | 22.5 | Target bedtime: activity from here, leading into sleep, joins the night |
+| `MORNING_END_H` | 6.75 | Target wake time: activity before here, after sleep, joins the night |
 
-If you regularly wake after 6am and get up before 7am, or go to bed earlier than 10pm, adjust these.
+Hours are decimal clock hours, so `22.5` is 22:30 and `6.75` is 06:45. Setting `MORNING_END_H` later captures groggy morning phone checks as night, but a screen-free streak that starts before that hour (for example breakfast after an early wake-up) will be counted as night too.
 
 ## Architecture
 
