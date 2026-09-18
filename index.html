@@ -86,7 +86,7 @@
     display:grid;
     grid-template-columns:1fr 1fr;
     gap:14px;
-    margin-bottom:28px;
+    margin-bottom:32px;
     align-items:start;
   }
   @media (max-width:560px){
@@ -151,6 +151,7 @@
     font-size:0.8rem;
     color:var(--text-muted);
     margin-bottom:14px;
+    min-height:2.4em;
   }
 
   .timeline{
@@ -184,6 +185,7 @@
     font-size:0.68rem;
     color:var(--text-muted);
     font-family:"IBM Plex Mono", ui-monospace, monospace;
+    min-height:1em;
   }
 
   .devices{
@@ -224,6 +226,7 @@
     outline-offset:-1px;
   }
 
+  section.block{ margin-bottom:32px; }
   h2{
     font-family:"Fraunces", Georgia, serif;
     font-weight:600;
@@ -245,6 +248,7 @@
     text-align:left;
     padding:9px 12px;
     white-space:nowrap;
+    vertical-align:top;
   }
   thead th{
     font-size:0.72rem;
@@ -260,6 +264,18 @@
     font-variant-numeric: tabular-nums;
     font-weight:500;
   }
+  td.rank{
+    font-family:"IBM Plex Mono", ui-monospace, monospace;
+    color:var(--text-muted);
+    width:1%;
+  }
+  .cell-sub{
+    font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size:0.72rem;
+    font-weight:400;
+    color:var(--text-muted);
+    margin-top:2px;
+  }
   .tag{
     display:inline-block;
     font-size:0.72rem;
@@ -269,8 +285,9 @@
   }
   .tag.day{ background:var(--day-soft); color:var(--day); }
   .tag.night{ background:var(--night-soft); color:var(--night); }
+  .tag.live{ background:var(--surface-2); color:var(--text-muted); margin-left:6px; }
 
-  #history-empty{
+  .empty{
     color:var(--text-muted);
     font-size:0.85rem;
     padding:14px;
@@ -280,7 +297,7 @@
   }
 
   footer{
-    margin-top:26px;
+    margin-top:8px;
     font-size:0.75rem;
     color:var(--text-muted);
     line-height:1.5;
@@ -312,14 +329,14 @@
 <div class="tiles">
   <div class="tile day" id="tile-day">
     <div class="tile-head">
-      <span class="tile-label">Day &middot; 6am&ndash;6pm</span>
+      <span class="tile-label">Day</span>
       <span class="pill" id="day-pill">&mdash;</span>
     </div>
     <div class="metric-label">All devices combined</div>
     <div class="score"><span id="day-score">&mdash;</span><span class="score-unit">hrs longest gap</span></div>
     <div class="tile-sub" id="day-sub">&nbsp;</div>
     <div class="timeline" id="day-timeline"></div>
-    <div class="timeline-labels"><span>6:00</span><span>18:00</span></div>
+    <div class="timeline-labels"><span id="day-tl-start"></span><span id="day-tl-end"></span></div>
     <div class="devices">
       <div class="metric-label">By device</div>
       <div class="dev-list" id="day-devices"></div>
@@ -328,14 +345,14 @@
 
   <div class="tile night" id="tile-night">
     <div class="tile-head">
-      <span class="tile-label">Night &middot; 6pm&ndash;6am</span>
+      <span class="tile-label">Night</span>
       <span class="pill" id="night-pill">&mdash;</span>
     </div>
     <div class="metric-label">All devices combined</div>
     <div class="score"><span id="night-score">&mdash;</span><span class="score-unit">hrs longest gap</span></div>
     <div class="tile-sub" id="night-sub">&nbsp;</div>
     <div class="timeline" id="night-timeline"></div>
-    <div class="timeline-labels"><span>18:00</span><span>6:00</span></div>
+    <div class="timeline-labels"><span id="night-tl-start"></span><span id="night-tl-end"></span></div>
     <div class="devices">
       <div class="metric-label">By device</div>
       <div class="dev-list" id="night-devices"></div>
@@ -343,19 +360,42 @@
   </div>
 </div>
 
-<h2>Recent periods</h2>
-<div id="history-wrap">
-  <div id="history-empty">No completed periods yet.</div>
+<section class="block">
+  <h2>Longest streaks</h2>
+  <div class="empty" id="league-empty">No screen-free streaks over 15 minutes yet.</div>
+  <div class="table-wrap" id="league-table-wrap" hidden>
+    <table>
+      <thead><tr><th>#</th><th>Streak</th><th>Type</th><th>When</th></tr></thead>
+      <tbody id="league-body"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="block">
+  <h2>Monthly averages</h2>
+  <div class="empty" id="monthly-empty">Nothing to average yet.</div>
+  <div class="table-wrap" id="monthly-table-wrap" hidden>
+    <table>
+      <thead><tr><th>Month</th><th>Top 3 day streaks (avg)</th><th>Longest night streak (avg)</th></tr></thead>
+      <tbody id="monthly-body"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="block">
+  <h2>Recent periods</h2>
+  <div class="empty" id="history-empty">No earlier periods yet.</div>
   <div class="table-wrap" id="history-table-wrap" hidden>
     <table>
       <thead><tr id="history-head"></tr></thead>
       <tbody id="history-body"></tbody>
     </table>
   </div>
-</div>
+</section>
 
 <footer>
-  <p>Longest gap = the longest stretch with no keyboard, mouse or screen activity. &ldquo;Combined&rdquo; counts a gap only when <em>every</em> device was quiet. * = partial: logging started partway through the period (for combined, when the last device began logging), and earlier time isn&rsquo;t counted as screen-free.</p>
+  <p><strong>How day and night are split.</strong> A streak is the time between two interactions, on any device, and is never cut at a clock boundary. A streak counts as <em>night</em> if it overlaps 00:00&ndash;05:00 by 30+ minutes. The night then stretches back over any activity from 22:00 leading into that streak (your bedtime routine) and forward over any activity until 06:00 (waking up, checking your phone), so a 3am wake-up stays inside the night. Everything else is day: a screen-free 4&ndash;10pm stays a day streak even if you go to bed at 10:30. Streaks under 15 minutes are ignored in the tables above. A night is recognised once you&rsquo;ve been screen-free past about 00:30.</p>
+  <p>&ldquo;Combined&rdquo; only counts a gap when <em>every</em> device was quiet, from when the last device began logging. Per-device figures are measured within the same day or night period; * = that device started logging partway through it. Monthly averages leave out the streak or night still in progress.</p>
   <p>Reads directly from your Google Sheet event log. Refreshes automatically every 2 minutes &middot;
   <button id="refresh-btn" type="button">Refresh now</button></p>
 </footer>
@@ -369,7 +409,16 @@
   var FEED_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:json&sheet=" + encodeURIComponent(SHEET_TAB);
   var REFRESH_MS = 120000;
   var RENDER_MS = 15000;
-  var HISTORY_PERIODS = 8;
+
+  // --- how day and night are split (tweak to suit your routine) ---------
+  var MIN_STREAK_MS = 15 * 60000;   // shorter gaps are just normal use, not a "streak"
+  var CORE_START_H = 0;             // hours after midnight in which you should definitely be asleep
+  var CORE_END_H = 5;
+  var MIN_CORE_MS = 30 * 60000;     // a gap is "sleep" once it overlaps the core hours by this much
+  var EVENING_START_H = 22;         // activity from this hour, leading into the sleep gap, joins the night
+  var MORNING_END_H = 6;            // activity before this hour, following the sleep gap, joins the night
+  var LEAGUE_ROWS = 10;
+  var HISTORY_ROWS = 10;
 
   // Populated by fetchEvents(). Devices are discovered from the sheet's
   // Device column, so a new logger appears here with no code change.
@@ -381,9 +430,9 @@
   var fetchError = null;
 
   function setStatus(msg, isError){
-    var el = document.getElementById("status");
-    el.textContent = msg;
-    el.classList.toggle("error", !!isError);
+    var node = document.getElementById("status");
+    node.textContent = msg;
+    node.classList.toggle("error", !!isError);
   }
 
   function parseGvizDate(v){
@@ -442,50 +491,115 @@
       });
   }
 
-  // --- window / scoring math -------------------------------------------
+  // --- streaks, nights and days -----------------------------------------
 
-  function dayWindowFor(dateAtMidnight){
-    var start = new Date(dateAtMidnight); start.setHours(6,0,0,0);
-    var end = new Date(dateAtMidnight); end.setHours(18,0,0,0);
-    return {type:"day", start:start, end:end};
-  }
-  function nightWindowFor(dateAtMidnight){
-    var start = new Date(dateAtMidnight); start.setHours(18,0,0,0);
-    var end = new Date(dateAtMidnight); end.setDate(end.getDate()+1); end.setHours(6,0,0,0);
-    return {type:"night", start:start, end:end};
+  function startOfDay(d){ var x = new Date(d); x.setHours(0,0,0,0); return x; }
+  function sameDay(a, b){
+    return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
   }
 
-  // Returns [current window, the other type's most recent window, ...older].
-  function currentAndPastWindows(now, count){
-    var midnight = new Date(now); midnight.setHours(0,0,0,0);
-    var hour = now.getHours();
-    var windows = [];
-    if(hour >= 6 && hour < 18){
-      windows.push(dayWindowFor(midnight));
-      var prevMidnight = new Date(midnight); prevMidnight.setDate(prevMidnight.getDate()-1);
-      windows.push(nightWindowFor(prevMidnight));
-    } else if(hour >= 18){
-      windows.push(nightWindowFor(midnight));
-      windows.push(dayWindowFor(midnight));
-    } else {
-      var prevMidnight2 = new Date(midnight); prevMidnight2.setDate(prevMidnight2.getDate()-1);
-      windows.push(nightWindowFor(prevMidnight2));
-      windows.push(dayWindowFor(midnight));
+  // Interruptions = activity bursts inside a night, not counting the bedtime
+  // burst at the start or (once the night is over) the waking burst at the end.
+  function countInterruptions(times, from, to, ongoing){
+    var clusters = 1;
+    for(var i=from+1;i<=to;i++){
+      if(times[i] - times[i-1] >= MIN_STREAK_MS) clusters++;
     }
-    var cursorEnd = windows[1].start;
-    while(windows.length < count){
-      var cursorMidnight = new Date(cursorEnd); cursorMidnight.setHours(0,0,0,0);
-      var isDayEnd = cursorEnd.getHours() === 6;
-      var w = isDayEnd
-        ? nightWindowFor(new Date(cursorMidnight.getTime() - 86400000))
-        : dayWindowFor(cursorMidnight);
-      windows.push(w);
-      cursorEnd = w.start;
-    }
-    return windows;
+    return Math.max(0, clusters - (ongoing ? 1 : 2));
   }
 
-  // times = sorted Date[] for the device (or all devices merged).
+  function makePeriod(type, lo, hi, gaps, times, evening){
+    var longest = gaps[lo];
+    for(var i=lo+1;i<=hi;i++){
+      if(gaps[i].ms > longest.ms) longest = gaps[i];
+    }
+    var open = gaps[hi].open;
+    return {
+      type: type,
+      start: gaps[lo].start,
+      end: gaps[hi].end,
+      ongoing: open,
+      longest: longest,
+      evening: evening || null,
+      fromLoggingStart: lo === 0,
+      interruptions: type === "night" ? countInterruptions(times, lo, open ? hi : hi + 1, open) : 0
+    };
+  }
+
+  // Turns the merged event times into gaps (streaks), labels each gap day or
+  // night, and groups them into alternating day/night periods. Every period
+  // boundary is an interaction, so no streak is ever split.
+  function analyse(now){
+    var times = [];
+    if(combinedStart){
+      times = allTimes.filter(function(t){ return t >= combinedStart; });
+    }
+    var out = {times: times, gaps: [], periods: [], months: {}};
+    if(!times.length) return out;
+
+    var gaps = out.gaps;
+    for(var i=1;i<times.length;i++){
+      gaps.push({start:times[i-1], end:times[i], ms:times[i]-times[i-1], open:false, night:false});
+    }
+    var last = times[times.length-1];
+    if(now > last){
+      gaps.push({start:last, end:now, ms:now-last, open:true, night:false});
+    }
+    if(!gaps.length) return out;
+
+    var candidates = [];
+    gaps.forEach(function(g, idx){ if(g.ms >= MIN_CORE_MS) candidates.push(idx); });
+
+    var nights = [];
+    var day = startOfDay(times[0]);
+    day.setDate(day.getDate() - 1);
+    var lastDay = startOfDay(now);
+    for(; day <= lastDay; day.setDate(day.getDate() + 1)){
+      var evening = new Date(day);
+      var coreStart = new Date(evening); coreStart.setDate(coreStart.getDate()+1); coreStart.setHours(CORE_START_H,0,0,0);
+      var coreEnd = new Date(evening); coreEnd.setDate(coreEnd.getDate()+1); coreEnd.setHours(CORE_END_H,0,0,0);
+      var qualifying = candidates.filter(function(idx){
+        var g = gaps[idx];
+        if(g.night) return false;
+        return Math.min(g.end, coreEnd) - Math.max(g.start, coreStart) >= MIN_CORE_MS;
+      });
+      if(!qualifying.length) continue;
+
+      var eveningFrom = new Date(evening); eveningFrom.setHours(EVENING_START_H,0,0,0);
+      var morningTo = new Date(evening); morningTo.setDate(morningTo.getDate()+1); morningTo.setHours(MORNING_END_H,0,0,0);
+      var lo = qualifying[0], hi = qualifying[qualifying.length-1];
+      while(lo > 0 && !gaps[lo-1].night && gaps[lo-1].start >= eveningFrom) lo--;
+      while(hi < gaps.length-1 && gaps[hi+1].start < morningTo) hi++;
+      for(var k=lo;k<=hi;k++) gaps[k].night = true;
+      nights.push({lo:lo, hi:hi, evening:evening});
+    }
+
+    var dayFrom = 0;
+    nights.forEach(function(n){
+      if(n.lo > dayFrom) out.periods.push(makePeriod("day", dayFrom, n.lo-1, gaps, times));
+      out.periods.push(makePeriod("night", n.lo, n.hi, gaps, times, n.evening));
+      dayFrom = n.hi + 1;
+    });
+    if(dayFrom < gaps.length) out.periods.push(makePeriod("day", dayFrom, gaps.length-1, gaps, times));
+
+    // Monthly buckets: finished day streaks by month they started; finished
+    // nights by the month of the evening they began.
+    function bucket(d){
+      var key = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2, "0");
+      return out.months[key] || (out.months[key] = {date: new Date(d.getFullYear(), d.getMonth(), 1), days: [], nights: []});
+    }
+    gaps.forEach(function(g){
+      if(g.night || g.open || g.ms < MIN_STREAK_MS) return;
+      bucket(g.start).days.push(g.ms);
+    });
+    out.periods.forEach(function(p){
+      if(p.type !== "night" || p.ongoing) return;
+      bucket(p.evening).nights.push(p.longest.ms);
+    });
+    return out;
+  }
+
+  // times = sorted Date[] for a device (or all devices merged).
   // loggingStart = when logging began for that scope. Nothing before it is
   // known to be screen-free -- it's just unrecorded -- so the window is
   // clipped to start no earlier than that.
@@ -494,7 +608,7 @@
     var effectiveEnd = win.end < now ? win.end : now;
 
     if(!loggingStart || effectiveStart >= effectiveEnd){
-      return {hours:null, inProgress: win.end > now, points:[], noData:true, partial:false};
+      return {hours:null, points:[], noData:true, partial:false};
     }
 
     var within = times.filter(function(t){ return t >= effectiveStart && t <= effectiveEnd; });
@@ -506,22 +620,9 @@
     }
     return {
       hours: longestMs / 3600000,
-      inProgress: win.end > now,
       points: points,
       noData: false,
-      partial: effectiveStart > win.start,
-      effectiveStart: effectiveStart
-    };
-  }
-
-  function windowResults(win, now){
-    var byDevice = {};
-    devices.forEach(function(name){
-      byDevice[name] = longestGap(win, now, timesByDevice[name], timesByDevice[name][0]);
-    });
-    return {
-      combined: longestGap(win, now, allTimes, combinedStart),
-      byDevice: byDevice
+      partial: effectiveStart > win.start
     };
   }
 
@@ -535,8 +636,11 @@
     return d.toLocaleDateString(undefined, {weekday:"short", day:"numeric", month:"short"});
   }
   function fmtWhen(d, now){
-    var sameDay = d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth() && d.getDate()===now.getDate();
-    return sameDay ? fmtTime(d) : fmtDate(d) + " " + fmtTime(d);
+    return sameDay(d, now) ? fmtTime(d) : fmtDate(d) + " " + fmtTime(d);
+  }
+  function fmtRange(start, end, ongoing){
+    var endText = ongoing ? "now" : (sameDay(start, end) ? fmtTime(end) : fmtDate(end) + " " + fmtTime(end));
+    return fmtDate(start) + " " + fmtTime(start) + " → " + endText;
   }
   function fmtScore(result){
     return result.noData ? "—" : fmtHours(result.hours) + " hrs" + (result.partial ? " *" : "");
@@ -555,6 +659,7 @@
     container.innerHTML = "";
     if(result.noData) return;
     var span = win.end - win.start;
+    if(span <= 0) return;
     times.forEach(function(t){
       if(t < win.start || t >= win.end) return;
       var tick = el("div", "tick");
@@ -574,34 +679,57 @@
     }
   }
 
-  function renderTile(type, win, now){
-    var res = windowResults(win, now);
-    var result = res.combined;
+  function deviceResults(win, now){
+    var byDevice = {};
+    devices.forEach(function(name){
+      byDevice[name] = longestGap(win, now, timesByDevice[name], timesByDevice[name][0]);
+    });
+    return byDevice;
+  }
+
+  function renderTile(type, period, now, times){
     var pill = document.getElementById(type+"-pill");
     var sub = document.getElementById(type+"-sub");
     var scoreEl = document.getElementById(type+"-score");
-
-    if(result.noData){
-      scoreEl.textContent = "—";
-      pill.textContent = "No data";
-      sub.textContent = "Logging hadn't started yet for this period.";
-    } else {
-      scoreEl.textContent = fmtHours(result.hours);
-      var partialNote = result.partial ? "Partial — all devices logging from " + fmtTime(result.effectiveStart) + ". " : "";
-      if(result.inProgress){
-        pill.textContent = result.partial ? "Live (partial)" : "Live";
-        sub.textContent = partialNote + "In progress · window ends " + fmtTime(win.end);
-      } else {
-        pill.textContent = result.partial ? "Final (partial)" : "Final";
-        sub.textContent = partialNote + "Completed " + fmtDate(win.end) + ", " + fmtTime(win.start) + "–" + fmtTime(win.end);
-      }
-    }
-    renderTimeline(document.getElementById(type+"-timeline"), win, result, allTimes);
-
+    var timeline = document.getElementById(type+"-timeline");
+    var startLabel = document.getElementById(type+"-tl-start");
+    var endLabel = document.getElementById(type+"-tl-end");
     var list = document.getElementById(type+"-devices");
     list.innerHTML = "";
+
+    if(!period){
+      scoreEl.textContent = "—";
+      pill.textContent = "No data";
+      sub.textContent = type === "night"
+        ? "No night detected yet. It needs 30+ minutes screen-free between 00:00 and 05:00."
+        : "No day session yet.";
+      timeline.innerHTML = "";
+      startLabel.textContent = "";
+      endLabel.textContent = "";
+      return;
+    }
+
+    var win = {start: period.start, end: period.end};
+    var result = longestGap(win, now, times, combinedStart);
+    scoreEl.textContent = result.noData ? "—" : fmtHours(result.hours);
+    pill.textContent = period.ongoing ? "Live" : "Final";
+
+    var notes = [];
+    if(period.fromLoggingStart) notes.push("since logging began");
+    if(type === "night"){
+      notes.push(period.interruptions === 0
+        ? "no interruptions"
+        : period.interruptions + (period.interruptions === 1 ? " interruption" : " interruptions"));
+    }
+    sub.textContent = fmtRange(period.start, period.end, period.ongoing) + (notes.length ? " · " + notes.join(" · ") : "");
+
+    renderTimeline(timeline, win, result, times);
+    startLabel.textContent = fmtTime(period.start);
+    endLabel.textContent = period.ongoing ? "now" : fmtTime(period.end);
+
+    var byDevice = deviceResults(win, now);
     devices.forEach(function(name){
-      var r = res.byDevice[name];
+      var r = byDevice[name];
       var row = el("div", "dev-row");
       row.appendChild(el("span", "dev-name", displayName(name)));
       var tl = el("div", "timeline mini");
@@ -612,21 +740,88 @@
     });
   }
 
-  function renderHistory(windows, now){
-    var rows = [];
-    windows.slice(2).forEach(function(win){
-      var res = windowResults(win, now);
-      var hasData = !res.combined.noData || devices.some(function(n){ return !res.byDevice[n].noData; });
-      if(hasData) rows.push({win:win, res:res});
+  function renderLeague(analysis){
+    var top = analysis.gaps
+      .filter(function(g){ return g.ms >= MIN_STREAK_MS; })
+      .sort(function(a, b){ return b.ms - a.ms; })
+      .slice(0, LEAGUE_ROWS);
+
+    var wrap = document.getElementById("league-table-wrap");
+    var empty = document.getElementById("league-empty");
+    wrap.hidden = top.length === 0;
+    empty.hidden = top.length !== 0;
+    var body = document.getElementById("league-body");
+    body.innerHTML = "";
+    top.forEach(function(g, i){
+      var tr = el("tr");
+      tr.appendChild(el("td", "rank", String(i + 1)));
+      tr.appendChild(el("td", "num", fmtHours(g.ms / 3600000) + " hrs"));
+      var typeCell = el("td");
+      typeCell.appendChild(el("span", "tag " + (g.night ? "night" : "day"), g.night ? "Night" : "Day"));
+      tr.appendChild(typeCell);
+      var whenCell = el("td", null, fmtRange(g.start, g.end, g.open));
+      if(g.open) whenCell.appendChild(el("span", "tag live", "Ongoing"));
+      tr.appendChild(whenCell);
+      body.appendChild(tr);
     });
+  }
+
+  function average(list){
+    return list.reduce(function(a, b){ return a + b; }, 0) / list.length;
+  }
+
+  function renderMonthly(analysis){
+    var keys = Object.keys(analysis.months).sort().reverse().filter(function(k){
+      var m = analysis.months[k];
+      return m.days.length || m.nights.length;
+    });
+    var wrap = document.getElementById("monthly-table-wrap");
+    var empty = document.getElementById("monthly-empty");
+    wrap.hidden = keys.length === 0;
+    empty.hidden = keys.length !== 0;
+    var body = document.getElementById("monthly-body");
+    body.innerHTML = "";
+
+    keys.forEach(function(key){
+      var m = analysis.months[key];
+      var tr = el("tr");
+      tr.appendChild(el("td", null, m.date.toLocaleDateString(undefined, {month:"long", year:"numeric"})));
+
+      var dayCell = el("td", "num");
+      if(m.days.length){
+        var top3 = m.days.slice().sort(function(a, b){ return b - a; }).slice(0, 3).map(function(ms){ return ms / 3600000; });
+        dayCell.appendChild(document.createTextNode(fmtHours(average(top3)) + " hrs"));
+        var detail = top3.map(fmtHours).join(" · ") + " hrs";
+        if(top3.length < 3) detail += " (only " + top3.length + " so far)";
+        dayCell.appendChild(el("div", "cell-sub", detail));
+      } else {
+        dayCell.textContent = "—";
+      }
+      tr.appendChild(dayCell);
+
+      var nightCell = el("td", "num");
+      if(m.nights.length){
+        nightCell.appendChild(document.createTextNode(fmtHours(average(m.nights) / 3600000) + " hrs"));
+        nightCell.appendChild(el("div", "cell-sub", "over " + m.nights.length + (m.nights.length === 1 ? " night" : " nights")));
+      } else {
+        nightCell.textContent = "—";
+      }
+      tr.appendChild(nightCell);
+      body.appendChild(tr);
+    });
+  }
+
+  function renderHistory(analysis, latest, now){
+    var rows = analysis.periods
+      .filter(function(p){ return p !== latest.day && p !== latest.night; })
+      .reverse()
+      .slice(0, HISTORY_ROWS);
 
     var wrap = document.getElementById("history-table-wrap");
     var empty = document.getElementById("history-empty");
-    if(rows.length === 0){
-      wrap.hidden = true; empty.hidden = false;
-      return;
-    }
-    wrap.hidden = false; empty.hidden = true;
+    wrap.hidden = rows.length === 0;
+    empty.hidden = rows.length !== 0;
+    if(rows.length === 0) return;
 
     var head = document.getElementById("history-head");
     head.innerHTML = "";
@@ -636,15 +831,17 @@
 
     var body = document.getElementById("history-body");
     body.innerHTML = "";
-    rows.forEach(function(row){
+    rows.forEach(function(p){
+      var win = {start: p.start, end: p.end};
       var tr = el("tr");
-      tr.appendChild(el("td", null, fmtDate(row.win.start) + ", " + fmtTime(row.win.start) + "–" + fmtTime(row.win.end)));
+      tr.appendChild(el("td", null, fmtRange(p.start, p.end, p.ongoing)));
       var typeCell = el("td");
-      typeCell.appendChild(el("span", "tag " + row.win.type, row.win.type === "day" ? "Day" : "Night"));
+      typeCell.appendChild(el("span", "tag " + p.type, p.type === "day" ? "Day" : "Night"));
       tr.appendChild(typeCell);
-      tr.appendChild(el("td", "num", fmtScore(row.res.combined)));
+      tr.appendChild(el("td", "num", fmtScore(longestGap(win, now, analysis.times, combinedStart))));
+      var byDevice = deviceResults(win, now);
       devices.forEach(function(name){
-        tr.appendChild(el("td", "num", fmtScore(row.res.byDevice[name])));
+        tr.appendChild(el("td", "num", fmtScore(byDevice[name])));
       });
       body.appendChild(tr);
     });
@@ -674,12 +871,15 @@
       setStatus(parts.join(" · "));
     }
 
-    var windows = currentAndPastWindows(now, HISTORY_PERIODS);
-    var byType = {};
-    windows.slice(0, 2).forEach(function(w){ byType[w.type] = w; });
-    renderTile("day", byType.day, now);
-    renderTile("night", byType.night, now);
-    renderHistory(windows, now);
+    var analysis = analyse(now);
+    var latest = {day: null, night: null};
+    analysis.periods.forEach(function(p){ latest[p.type] = p; });
+
+    renderTile("day", latest.day, now, analysis.times);
+    renderTile("night", latest.night, now, analysis.times);
+    renderLeague(analysis);
+    renderMonthly(analysis);
+    renderHistory(analysis, latest, now);
   }
 
   function refresh(){
