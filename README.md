@@ -11,6 +11,7 @@ There is no server to run. Devices report to a Google Sheet through a tiny Apps 
 - **Day and Night tiles.** The longest screen-free gap in the current (or most recent) day and night, with a timeline of every interaction and a per-device breakdown alongside the all-devices figure.
 - **Longest streaks.** A league table of your 10 longest streaks. Several can come from the same day.
 - **Monthly averages.** For each month: the average of your three longest day streaks, and the average of your nightly longest streak.
+- **Daily activity.** For each of the last 14 days, active time for each computer and pickups for each phone.
 - **Recent periods.** The last few day and night periods, with per-device scores.
 
 ## How a streak is measured
@@ -41,6 +42,8 @@ The rules are constants near the top of the script in `index.html`:
 | `NIGHT_FROM_H` | 21 | A streak starting from this hour is night... |
 | `NIGHT_UNTIL_H` | 5 | ...until this hour. Any other start is day |
 | `MIN_STREAK_MS` | 15 min | Gaps shorter than this are not counted as streaks |
+| `PING_SECONDS` | 10 | Seconds of activity that one computer ping represents (match the logger's poll interval) |
+| `PHONE_LIKE` | `/phone\|mobile\|tablet/i` | Device names matching this show pickups instead of active time |
 
 Hours are decimal clock hours, so `21` is 21:00 and `22.5` is 22:30.
 
@@ -161,6 +164,12 @@ Exclude the automation app from battery optimisation, or Android will eventually
 Give the new logger a new `DeviceName` (for example `work_laptop`). It appears on the dashboard automatically as "Work laptop". No changes to the sheet, the Apps Script or the dashboard are needed.
 
 The combined figures only count from when the **last** device started logging, because before that you cannot know whether it was in use. Adding a device therefore restarts the combined streaks, league table and monthly averages from that point.
+
+## Daily activity numbers
+
+- **Computers: active time** = pings x `PING_SECONDS`. A ping means there was keyboard or mouse input in that 10-second slot, so it measures time spent actively typing or clicking. Reading or watching without touching anything is not counted.
+- **Phones: pickups** = screen-on events, estimated as half the pings because each session sends one ping when the screen turns on and one when it turns off. This assumes both the screen-on and screen-off automations are set up.
+- A device counts as a phone if its name matches `PHONE_LIKE`; anything else is treated as a computer.
 
 ## Limitations
 

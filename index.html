@@ -276,6 +276,11 @@
     color:var(--text-muted);
     margin-top:2px;
   }
+  thead .cell-sub{
+    text-transform:none;
+    letter-spacing:0;
+    margin-top:1px;
+  }
   .tag{
     display:inline-block;
     font-size:0.72rem;
@@ -383,6 +388,17 @@
 </section>
 
 <section class="block">
+  <h2>Daily activity</h2>
+  <div class="empty" id="daily-empty">No activity logged yet.</div>
+  <div class="table-wrap" id="daily-table-wrap" hidden>
+    <table>
+      <thead><tr id="daily-head"></tr></thead>
+      <tbody id="daily-body"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="block">
   <h2>Recent periods</h2>
   <div class="empty" id="history-empty">No earlier periods yet.</div>
   <div class="table-wrap" id="history-table-wrap" hidden>
@@ -395,6 +411,7 @@
 
 <footer>
   <p><strong>How day and night are split.</strong> A streak is the time between two interactions, on any device, and is never cut at a clock boundary. It counts as day or night according to the check that <em>starts</em> it: a streak that starts from 21:00 until 05:00 is night, and one that starts from 05:00 until 21:00 is day. So a screen-free 4&ndash;10pm is a day streak, sleep that begins with a 22:56 check is a night streak, a wake-up check at 3am starts another night streak, and a check at 5:30am starts a day streak. Night interruptions are separate bursts of activity between midnight and 05:00. Streaks under 15 minutes are ignored in the tables above.</p>
+  <p><strong>Daily activity.</strong> For computers, active time is the number of pings times 10 seconds; a ping means there was keyboard or mouse input in that 10-second slot, so time spent reading or watching without touching anything isn&rsquo;t counted. For phones, pickups are screen-on events, estimated as half the screen on/off pings. Days are midnight to midnight; * = logging started partway through that day.</p>
   <p>&ldquo;Combined&rdquo; only counts a gap when <em>every</em> device was quiet, from when the last device began logging. Per-device figures are measured within the same day or night period; * = that device started logging partway through it. Monthly averages leave out the streak or night still in progress.</p>
   <p>Reads directly from your Google Sheet event log. Refreshes automatically every 2 minutes &middot;
   <button id="refresh-btn" type="button">Refresh now</button></p>
@@ -416,6 +433,9 @@
   var NIGHT_FROM_H = 21;            // a streak starting from this hour...
   var NIGHT_UNTIL_H = 5;            // ...until this hour is night; any other start is day
   var MIN_STREAK_MS = 15 * 60000;   // shorter gaps are just normal use, not a "streak"
+  var PING_SECONDS = 10;            // a computer ping means input in a slot this long
+  var PHONE_LIKE = /phone|mobile|tablet/i;  // devices shown as pickups rather than active time
+  var DAILY_ROWS = 14;
   var LEAGUE_ROWS = 10;
   var HISTORY_ROWS = 10;
 
@@ -833,6 +853,66 @@
     });
   }
 
+  function isPhone(name){ return PHONE_LIKE.test(name); }
+  function dayKey(d){ return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); }
+  function fmtDuration(minutes){
+    var m = Math.round(minutes);
+    return m >= 60 ? Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m" : m + "m";
+  }
+
+  function renderDaily(now){
+    var wrap = document.getElementById("daily-table-wrap");
+    var empty = document.getElementById("daily-empty");
+    wrap.hidden = devices.length === 0;
+    empty.hidden = devices.length !== 0;
+    if(devices.length === 0) return;
+
+    var counts = {};
+    devices.forEach(function(name){
+      var byDay = Object.create(null);
+      timesByDevice[name].forEach(function(t){
+        var key = dayKey(t);
+        byDay[key] = (byDay[key] || 0) + 1;
+      });
+      counts[name] = byDay;
+    });
+
+    var head = document.getElementById("daily-head");
+    head.innerHTML = "";
+    head.appendChild(el("th", null, "Day"));
+    devices.forEach(function(name){
+      var th = el("th", null, displayName(name));
+      th.appendChild(el("div", "cell-sub", isPhone(name) ? "pickups" : "active time"));
+      head.appendChild(th);
+    });
+
+    var body = document.getElementById("daily-body");
+    body.innerHTML = "";
+    var firstDay = startOfDay(allTimes[0]);
+    var today = startOfDay(now);
+    for(var i=0;i<DAILY_ROWS;i++){
+      var day = new Date(today); day.setDate(day.getDate() - i);
+      if(day < firstDay) break;
+      var nextDay = new Date(day); nextDay.setDate(nextDay.getDate() + 1);
+      var tr = el("tr");
+      tr.appendChild(el("td", null, fmtDate(day) + (i === 0 ? " (so far)" : "")));
+      devices.forEach(function(name){
+        var firstEvent = timesByDevice[name][0];
+        var td = el("td", "num");
+        if(firstEvent >= nextDay){
+          td.textContent = "—";
+        } else {
+          var n = counts[name][dayKey(day)] || 0;
+          var text = isPhone(name) ? String(Math.ceil(n / 2)) : fmtDuration(n * PING_SECONDS / 60);
+          if(firstEvent > day) text += " *";
+          td.textContent = text;
+        }
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    }
+  }
+
   function tickClock(){
     var now = new Date();
     document.getElementById("clock").textContent =
@@ -849,7 +929,7 @@
     } else if(eventCount === 0){
       setStatus("No interactions logged yet.");
     } else {
-      var parts = [eventCount + " interactions logged"];
+      var parts = [];
       devices.forEach(function(name){
         var arr = timesByDevice[name];
         parts.push(displayName(name) + " last at " + fmtWhen(arr[arr.length-1], now));
@@ -865,6 +945,7 @@
     renderTile("night", latest.night, now, analysis.times);
     renderLeague(analysis);
     renderMonthly(analysis);
+    renderDaily(now);
     renderHistory(analysis, latest, now);
   }
 
