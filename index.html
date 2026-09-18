@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Screen-Free Score</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EEF1F6;
+    --surface:#FFFFFF;
+    --surface-2:#F5F7FB;
+    --text:#161B27;
+    --text-muted:#5C6478;
+    --line:#DCE1EA;
+    --day:#C97A1F;
+    --day-soft:#F6E6D2;
+    --night:#4B4FD1;
+    --night-soft:#E3E4FB;
+    --radius:14px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0E1220;
+      --surface:#161B2C;
+      --surface-2:#1C2236;
+      --text:#E8EAF2;
+      --text-muted:#8D93A8;
+      --line:#262C40;
+      --day:#F0A94E;
+      --day-soft:#3A2C16;
+      --night:#9497FF;
+      --night-soft:#252A52;
+      color-scheme: dark;
+    }
+  }
+
+  *{box-sizing:border-box;}
+  [hidden]{ display:none !important; }
+  html,body{ margin:0; }
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    padding-inline:20px;
+    padding-block:28px 40px;
+    max-width:760px;
+    margin-inline:auto;
+  }
+
+  header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-bottom:22px;
+  }
+  h1{
+    font-family:"Fraunces", Georgia, serif;
+    font-weight:600;
+    font-size:1.7rem;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  #clock{
+    font-family:"IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color:var(--text-muted);
+    font-size:0.9rem;
+  }
+
+  #status{
+    font-size:0.85rem;
+    color:var(--text-muted);
+    margin-bottom:18px;
+    min-height:1.2em;
+  }
+  #status.error{ color:#C0392B; }
+  @media (prefers-color-scheme:dark){ #status.error{ color:#FF8A78; } }
+
+  .tiles{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+    margin-bottom:28px;
+  }
+  @media (max-width:520px){
+    .tiles{ grid-template-columns:1fr; }
+  }
+
+  .tile{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:18px 18px 16px;
+  }
+  .tile-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .tile-label{
+    font-family:"Fraunces", Georgia, serif;
+    font-weight:600;
+    font-size:1.05rem;
+  }
+  .tile.day .tile-label{ color:var(--day); }
+  .tile.night .tile-label{ color:var(--night); }
+
+  .pill{
+    font-size:0.7rem;
+    font-weight:600;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    padding:3px 8px;
+    border-radius:999px;
+  }
+  .tile.day .pill{ background:var(--day-soft); color:var(--day); }
+  .tile.night .pill{ background:var(--night-soft); color:var(--night); }
+
+  .score{
+    font-family:"IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight:600;
+    font-size:2.6rem;
+    line-height:1;
+    margin-bottom:4px;
+  }
+  .score-unit{
+    font-size:1.1rem;
+    color:var(--text-muted);
+    font-weight:500;
+    margin-left:4px;
+  }
+  .tile-sub{
+    font-size:0.8rem;
+    color:var(--text-muted);
+    margin-bottom:14px;
+  }
+
+  .timeline{
+    position:relative;
+    height:10px;
+    border-radius:6px;
+    background:var(--surface-2);
+    overflow:hidden;
+    margin-bottom:6px;
+  }
+  .timeline .tick{
+    position:absolute;
+    top:0;
+    bottom:0;
+    width:2px;
+  }
+  .tile.day .timeline .tick{ background:var(--day); }
+  .tile.night .timeline .tick{ background:var(--night); }
+  .timeline .longest{
+    position:absolute;
+    top:0;
+    bottom:0;
+    background:var(--surface-2);
+    outline:2px solid var(--text-muted);
+    outline-offset:-2px;
+    opacity:0.55;
+  }
+  .timeline-labels{
+    display:flex;
+    justify-content:space-between;
+    font-size:0.68rem;
+    color:var(--text-muted);
+    font-family:"IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  h2{
+    font-family:"Fraunces", Georgia, serif;
+    font-weight:600;
+    font-size:1.05rem;
+    margin:0 0 10px;
+  }
+  table{
+    width:100%;
+    border-collapse:collapse;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    overflow:hidden;
+    font-size:0.88rem;
+  }
+  th,td{
+    text-align:left;
+    padding:9px 12px;
+  }
+  thead th{
+    font-size:0.72rem;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    color:var(--text-muted);
+    background:var(--surface-2);
+    font-weight:600;
+  }
+  tbody tr + tr td{ border-top:1px solid var(--line); }
+  td.num{
+    font-family:"IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight:500;
+  }
+  .tag{
+    display:inline-block;
+    font-size:0.72rem;
+    font-weight:600;
+    padding:2px 7px;
+    border-radius:999px;
+  }
+  .tag.day{ background:var(--day-soft); color:var(--day); }
+  .tag.night{ background:var(--night-soft); color:var(--night); }
+
+  #history-empty{
+    color:var(--text-muted);
+    font-size:0.85rem;
+    padding:14px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+  }
+
+  footer{
+    margin-top:26px;
+    font-size:0.75rem;
+    color:var(--text-muted);
+  }
+  button{
+    font-family:inherit;
+    font-size:0.8rem;
+    background:var(--surface);
+    color:var(--text);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:6px 12px;
+    cursor:pointer;
+  }
+  button:hover{ background:var(--surface-2); }
+  button:focus-visible, a:focus-visible{ outline:2px solid var(--night); outline-offset:2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Screen-Free Score</h1>
+  <div id="clock">--:--:--</div>
+</header>
+
+<div id="status">Loading events&hellip;</div>
+
+<div class="tiles">
+  <div class="tile day" id="tile-day">
+    <div class="tile-head">
+      <span class="tile-label">Day &middot; 6am&ndash;6pm</span>
+      <span class="pill" id="day-pill">&mdash;</span>
+    </div>
+    <div class="score"><span id="day-score">&mdash;</span><span class="score-unit">hrs longest gap</span></div>
+    <div class="tile-sub" id="day-sub">&nbsp;</div>
+    <div class="timeline" id="day-timeline"></div>
+    <div class="timeline-labels"><span>6:00</span><span>18:00</span></div>
+  </div>
+
+  <div class="tile night" id="tile-night">
+    <div class="tile-head">
+      <span class="tile-label">Night &middot; 6pm&ndash;6am</span>
+      <span class="pill" id="night-pill">&mdash;</span>
+    </div>
+    <div class="score"><span id="night-score">&mdash;</span><span class="score-unit">hrs longest gap</span></div>
+    <div class="tile-sub" id="night-sub">&nbsp;</div>
+    <div class="timeline" id="night-timeline"></div>
+    <div class="timeline-labels"><span>18:00</span><span>6:00</span></div>
+  </div>
+</div>
+
+<h2>Recent periods</h2>
+<div id="history-wrap">
+  <div id="history-empty">No completed periods yet.</div>
+  <table id="history-table" hidden>
+    <thead><tr><th>Period</th><th>Type</th><th>Longest gap</th></tr></thead>
+    <tbody id="history-body"></tbody>
+  </table>
+</div>
+
+<footer>
+  Reads directly from your Google Sheet event log. Refreshes automatically every 2 minutes &middot;
+  <button id="refresh-btn" type="button">Refresh now</button>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var SHEET_ID = "1WH6lRgKfO9QS0Vv1G9v8P34XnYSbfM-bOWzLJkhIaD8";
+  var SHEET_TAB = "Events";
+  var FEED_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:json&sheet=" + encodeURIComponent(SHEET_TAB);
+  var REFRESH_MS = 120000;
+  var HISTORY_PERIODS = 8;
+
+  var events = [];        // sorted array of Date objects
+  var fetchError = null;
+
+  function statusEl(){ return document.getElementById("status"); }
+
+  function setStatus(msg, isError){
+    var el = statusEl();
+    el.textContent = msg;
+    el.classList.toggle("error", !!isError);
+  }
+
+  function parseGvizDate(v){
+    // v looks like "Date(2026,8,18,16,0,8)" -- month is already 0-indexed.
+    var m = /Date\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/.exec(v);
+    if(!m) return null;
+    return new Date(+m[1], +m[2], +m[3], +m[4], +m[5], +m[6]);
+  }
+
+  function fetchEvents(){
+    return fetch(FEED_URL, {cache:"no-store"})
+      .then(function(res){
+        if(!res.ok) throw new Error("HTTP " + res.status);
+        return res.text();
+      })
+      .then(function(text){
+        var start = text.indexOf("{");
+        var end = text.lastIndexOf("}");
+        if(start === -1 || end === -1) throw new Error("Unexpected response shape");
+        var data = JSON.parse(text.slice(start, end + 1));
+        var rows = (data.table && data.table.rows) || [];
+        var parsed = [];
+        for(var i=0;i<rows.length;i++){
+          var c = rows[i].c;
+          if(!c || !c[0] || c[0].v == null) continue;
+          var d = parseGvizDate(c[0].v);
+          if(d) parsed.push(d);
+        }
+        parsed.sort(function(a,b){ return a - b; });
+        events = parsed;
+        fetchError = null;
+      })
+      .catch(function(err){
+        fetchError = err;
+      });
+  }
+
+  // --- window / scoring math -------------------------------------------
+
+  function dayWindowFor(dateAtMidnight){
+    var start = new Date(dateAtMidnight); start.setHours(6,0,0,0);
+    var end = new Date(dateAtMidnight); end.setHours(18,0,0,0);
+    return {type:"day", start:start, end:end};
+  }
+  function nightWindowFor(dateAtMidnight){
+    var start = new Date(dateAtMidnight); start.setHours(18,0,0,0);
+    var end = new Date(dateAtMidnight); end.setDate(end.getDate()+1); end.setHours(6,0,0,0);
+    return {type:"night", start:start, end:end};
+  }
+
+  function currentAndPastWindows(now, count){
+    var midnight = new Date(now); midnight.setHours(0,0,0,0);
+    var hour = now.getHours();
+    var windows = [];
+    if(hour >= 6 && hour < 18){
+      windows.push(dayWindowFor(midnight));
+      var prevMidnight = new Date(midnight); prevMidnight.setDate(prevMidnight.getDate()-1);
+      windows.push(nightWindowFor(prevMidnight));
+    } else if(hour >= 18){
+      windows.push(nightWindowFor(midnight));
+      windows.push(dayWindowFor(midnight));
+    } else {
+      var prevMidnight2 = new Date(midnight); prevMidnight2.setDate(prevMidnight2.getDate()-1);
+      windows.push(nightWindowFor(prevMidnight2));
+      windows.push(dayWindowFor(midnight));
+    }
+    // walk backwards from the second entry to build history
+    var cursorEnd = windows[1].start;
+    while(windows.length < count){
+      var cursorMidnight = new Date(cursorEnd); cursorMidnight.setHours(0,0,0,0);
+      var isDayEnd = cursorEnd.getHours() === 6;
+      var w = isDayEnd
+        ? nightWindowFor(new Date(cursorMidnight.getTime() - 86400000))
+        : dayWindowFor(cursorMidnight);
+      windows.push(w);
+      cursorEnd = w.start;
+    }
+    return windows;
+  }
+
+  // loggingStart = timestamp of the very first event ever recorded, across
+  // all devices. Nothing before it is known to be screen-free -- it's just
+  // unrecorded -- so every window is clipped to start no earlier than that.
+  function longestGapHours(win, now, loggingStart){
+    var effectiveStart = (loggingStart && loggingStart > win.start) ? loggingStart : win.start;
+    var effectiveEnd = win.end < now ? win.end : now;
+
+    if(!loggingStart || effectiveStart >= effectiveEnd){
+      return {hours:null, inProgress: win.end > now, points:[], noData:true, partial:false};
+    }
+
+    var within = events.filter(function(e){ return e >= effectiveStart && e <= effectiveEnd; });
+    var points = [effectiveStart].concat(within, [effectiveEnd]);
+    var longestMs = 0;
+    for(var i=1;i<points.length;i++){
+      var gap = points[i] - points[i-1];
+      if(gap > longestMs) longestMs = gap;
+    }
+    return {
+      hours: longestMs / 3600000,
+      inProgress: win.end > now,
+      points: points,
+      noData: false,
+      partial: effectiveStart > win.start,
+      effectiveStart: effectiveStart
+    };
+  }
+
+  function fmtHours(h){ return h.toFixed(1); }
+  function fmtTime(d){
+    var hh = d.getHours().toString().padStart(2,"0");
+    var mm = d.getMinutes().toString().padStart(2,"0");
+    return hh + ":" + mm;
+  }
+  function fmtDate(d){
+    return d.toLocaleDateString(undefined, {weekday:"short", day:"numeric", month:"short"});
+  }
+
+  function renderTimeline(el, win, result){
+    el.innerHTML = "";
+    if(result.noData) return;
+    var span = win.end - win.start;
+    events.filter(function(e){ return e >= win.start && e < win.end; }).forEach(function(e){
+      var pct = ((e - win.start) / span) * 100;
+      var tick = document.createElement("div");
+      tick.className = "tick";
+      tick.style.left = pct + "%";
+      el.appendChild(tick);
+    });
+    // highlight the longest gap segment
+    var pts = result.points;
+    var best = 0, bestI = 0;
+    for(var i=1;i<pts.length;i++){
+      var g = pts[i]-pts[i-1];
+      if(g>best){ best=g; bestI=i; }
+    }
+    if(pts.length>1){
+      var leftPct = ((pts[bestI-1]-win.start)/span)*100;
+      var widthPct = ((pts[bestI]-pts[bestI-1])/span)*100;
+      var mark = document.createElement("div");
+      mark.className = "longest";
+      mark.style.left = leftPct + "%";
+      mark.style.width = Math.max(widthPct,0.4) + "%";
+      el.appendChild(mark);
+    }
+  }
+
+  function render(){
+    var now = new Date();
+    document.getElementById("clock").textContent =
+      now.getHours().toString().padStart(2,"0") + ":" +
+      now.getMinutes().toString().padStart(2,"0") + ":" +
+      now.getSeconds().toString().padStart(2,"0");
+
+    if(fetchError){
+      setStatus("Couldn't load the event sheet (" + fetchError.message + "). Retrying in the background.", true);
+    } else {
+      var lastEvent = events.length ? events[events.length-1] : null;
+      setStatus(events.length
+        ? (events.length + " interactions logged · last one at " + fmtTime(lastEvent) + " on " + fmtDate(lastEvent))
+        : "No interactions logged yet.");
+    }
+
+    var windows = currentAndPastWindows(now, HISTORY_PERIODS);
+    var loggingStart = events.length ? events[0] : null;
+
+    // Find the most relevant window of each type: the in-progress one if it matches,
+    // otherwise the most recently completed one.
+    function windowForType(type){
+      for(var i=0;i<windows.length;i++){
+        if(windows[i].type===type) return windows[i];
+      }
+      return null;
+    }
+
+    ["day","night"].forEach(function(type){
+      var win = windows[0].type===type ? windows[0] : windows[1].type===type ? windows[1] : windowForType(type);
+      var result = longestGapHours(win, now, loggingStart);
+      var pill = document.getElementById(type+"-pill");
+      var sub = document.getElementById(type+"-sub");
+      var scoreEl = document.getElementById(type+"-score");
+
+      if(result.noData){
+        scoreEl.textContent = "—";
+        pill.textContent = "No data";
+        sub.textContent = "Logging hadn't started yet for this period.";
+      } else {
+        scoreEl.textContent = fmtHours(result.hours);
+        var partialNote = result.partial ? "Partial — logging began at " + fmtTime(result.effectiveStart) + ". " : "";
+        if(result.inProgress){
+          pill.textContent = result.partial ? "Live (partial)" : "Live";
+          sub.textContent = partialNote + "In progress · window ends " + fmtTime(win.end);
+        } else {
+          pill.textContent = result.partial ? "Final (partial)" : "Final";
+          sub.textContent = partialNote + "Completed " + fmtDate(win.end) + ", " + fmtTime(win.start) + "–" + fmtTime(win.end);
+        }
+      }
+      renderTimeline(document.getElementById(type+"-timeline"), win, result);
+    });
+
+    // History table: skip the two "current" windows, drop any with no data
+    // at all (before logging started), show the rest most-recent first.
+    var historyRows = windows.slice(2).filter(function(win){
+      return !longestGapHours(win, now, loggingStart).noData;
+    });
+    var body = document.getElementById("history-body");
+    var table = document.getElementById("history-table");
+    var empty = document.getElementById("history-empty");
+    if(historyRows.length === 0){
+      table.hidden = true; empty.hidden = false;
+    } else {
+      table.hidden = false; empty.hidden = true;
+      body.innerHTML = "";
+      historyRows.forEach(function(win){
+        var result = longestGapHours(win, now, loggingStart);
+        var tr = document.createElement("tr");
+        var periodLabel = fmtDate(win.start) + ", " + fmtTime(win.start) + "–" + fmtTime(win.end);
+        var scoreText = fmtHours(result.hours) + " hrs" + (result.partial ? " *" : "");
+        tr.innerHTML =
+          "<td>" + periodLabel + "</td>" +
+          "<td><span class=\"tag " + win.type + "\">" + (win.type==="day"?"Day":"Night") + "</span></td>" +
+          "<td class=\"num\">" + scoreText + "</td>";
+        body.appendChild(tr);
+      });
+    }
+  }
+
+  function refresh(){
+    fetchEvents().then(render);
+  }
+
+  document.getElementById("refresh-btn").addEventListener("click", refresh);
+
+  refresh();
+  setInterval(render, 1000);      // tick the clock / live gap every second
+  setInterval(refresh, REFRESH_MS); // pull new events periodically
+})();
+</script>
+</body>
+</html>
