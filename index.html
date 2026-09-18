@@ -87,8 +87,9 @@
     grid-template-columns:1fr 1fr;
     gap:14px;
     margin-bottom:28px;
+    align-items:start;
   }
-  @media (max-width:520px){
+  @media (max-width:560px){
     .tiles{ grid-template-columns:1fr; }
   }
 
@@ -122,6 +123,15 @@
   }
   .tile.day .pill{ background:var(--day-soft); color:var(--day); }
   .tile.night .pill{ background:var(--night-soft); color:var(--night); }
+
+  .metric-label{
+    font-size:0.7rem;
+    font-weight:600;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    color:var(--text-muted);
+    margin-bottom:6px;
+  }
 
   .score{
     font-family:"IBM Plex Mono", ui-monospace, monospace;
@@ -176,24 +186,65 @@
     font-family:"IBM Plex Mono", ui-monospace, monospace;
   }
 
+  .devices{
+    margin-top:16px;
+    padding-top:14px;
+    border-top:1px solid var(--line);
+  }
+  .dev-list{
+    display:grid;
+    gap:10px;
+  }
+  .dev-row{
+    display:grid;
+    grid-template-columns:84px 1fr 72px;
+    align-items:center;
+    gap:10px;
+    font-size:0.82rem;
+  }
+  .dev-name{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .dev-val{
+    font-family:"IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight:500;
+    text-align:right;
+    white-space:nowrap;
+  }
+  .timeline.mini{
+    height:6px;
+    border-radius:4px;
+    margin-bottom:0;
+  }
+  .timeline.mini .longest{
+    outline-width:1px;
+    outline-offset:-1px;
+  }
+
   h2{
     font-family:"Fraunces", Georgia, serif;
     font-weight:600;
     font-size:1.05rem;
     margin:0 0 10px;
   }
-  table{
-    width:100%;
-    border-collapse:collapse;
+  .table-wrap{
     background:var(--surface);
     border:1px solid var(--line);
     border-radius:var(--radius);
-    overflow:hidden;
+    overflow-x:auto;
+  }
+  table{
+    width:100%;
+    border-collapse:collapse;
     font-size:0.88rem;
   }
   th,td{
     text-align:left;
     padding:9px 12px;
+    white-space:nowrap;
   }
   thead th{
     font-size:0.72rem;
@@ -232,7 +283,9 @@
     margin-top:26px;
     font-size:0.75rem;
     color:var(--text-muted);
+    line-height:1.5;
   }
+  footer p{ margin:0 0 8px; }
   button{
     font-family:inherit;
     font-size:0.8rem;
@@ -262,10 +315,15 @@
       <span class="tile-label">Day &middot; 6am&ndash;6pm</span>
       <span class="pill" id="day-pill">&mdash;</span>
     </div>
+    <div class="metric-label">All devices combined</div>
     <div class="score"><span id="day-score">&mdash;</span><span class="score-unit">hrs longest gap</span></div>
     <div class="tile-sub" id="day-sub">&nbsp;</div>
     <div class="timeline" id="day-timeline"></div>
     <div class="timeline-labels"><span>6:00</span><span>18:00</span></div>
+    <div class="devices">
+      <div class="metric-label">By device</div>
+      <div class="dev-list" id="day-devices"></div>
+    </div>
   </div>
 
   <div class="tile night" id="tile-night">
@@ -273,25 +331,33 @@
       <span class="tile-label">Night &middot; 6pm&ndash;6am</span>
       <span class="pill" id="night-pill">&mdash;</span>
     </div>
+    <div class="metric-label">All devices combined</div>
     <div class="score"><span id="night-score">&mdash;</span><span class="score-unit">hrs longest gap</span></div>
     <div class="tile-sub" id="night-sub">&nbsp;</div>
     <div class="timeline" id="night-timeline"></div>
     <div class="timeline-labels"><span>18:00</span><span>6:00</span></div>
+    <div class="devices">
+      <div class="metric-label">By device</div>
+      <div class="dev-list" id="night-devices"></div>
+    </div>
   </div>
 </div>
 
 <h2>Recent periods</h2>
 <div id="history-wrap">
   <div id="history-empty">No completed periods yet.</div>
-  <table id="history-table" hidden>
-    <thead><tr><th>Period</th><th>Type</th><th>Longest gap</th></tr></thead>
-    <tbody id="history-body"></tbody>
-  </table>
+  <div class="table-wrap" id="history-table-wrap" hidden>
+    <table>
+      <thead><tr id="history-head"></tr></thead>
+      <tbody id="history-body"></tbody>
+    </table>
+  </div>
 </div>
 
 <footer>
-  Reads directly from your Google Sheet event log. Refreshes automatically every 2 minutes &middot;
-  <button id="refresh-btn" type="button">Refresh now</button>
+  <p>Longest gap = the longest stretch with no keyboard, mouse or screen activity. &ldquo;Combined&rdquo; counts a gap only when <em>every</em> device was quiet. * = partial: logging started partway through the period (for combined, when the last device began logging), and earlier time isn&rsquo;t counted as screen-free.</p>
+  <p>Reads directly from your Google Sheet event log. Refreshes automatically every 2 minutes &middot;
+  <button id="refresh-btn" type="button">Refresh now</button></p>
 </footer>
 
 <script>
@@ -302,15 +368,20 @@
   var SHEET_TAB = "Events";
   var FEED_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:json&sheet=" + encodeURIComponent(SHEET_TAB);
   var REFRESH_MS = 120000;
+  var RENDER_MS = 15000;
   var HISTORY_PERIODS = 8;
 
-  var events = [];        // sorted array of Date objects
+  // Populated by fetchEvents(). Devices are discovered from the sheet's
+  // Device column, so a new logger appears here with no code change.
+  var devices = [];            // sorted device names
+  var timesByDevice = {};      // name -> sorted Date[]
+  var allTimes = [];           // every device merged, sorted Date[]
+  var combinedStart = null;    // latest first-event across devices
+  var eventCount = 0;
   var fetchError = null;
 
-  function statusEl(){ return document.getElementById("status"); }
-
   function setStatus(msg, isError){
-    var el = statusEl();
+    var el = document.getElementById("status");
     el.textContent = msg;
     el.classList.toggle("error", !!isError);
   }
@@ -320,6 +391,11 @@
     var m = /Date\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/.exec(v);
     if(!m) return null;
     return new Date(+m[1], +m[2], +m[3], +m[4], +m[5], +m[6]);
+  }
+
+  function displayName(device){
+    var s = device.replace(/[_-]+/g, " ");
+    return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
   function fetchEvents(){
@@ -339,10 +415,26 @@
           var c = rows[i].c;
           if(!c || !c[0] || c[0].v == null) continue;
           var d = parseGvizDate(c[0].v);
-          if(d) parsed.push(d);
+          if(!d) continue;
+          var dev = (c[1] && c[1].v != null) ? String(c[1].v).trim().toLowerCase() : "";
+          parsed.push({t:d, device: dev || "unknown"});
         }
-        parsed.sort(function(a,b){ return a - b; });
-        events = parsed;
+        parsed.sort(function(a,b){ return a.t - b.t; });
+
+        var byDev = Object.create(null), all = [];
+        parsed.forEach(function(e){
+          all.push(e.t);
+          (byDev[e.device] = byDev[e.device] || []).push(e.t);
+        });
+        allTimes = all;
+        timesByDevice = byDev;
+        devices = Object.keys(byDev).sort();
+        eventCount = all.length;
+        combinedStart = null;
+        devices.forEach(function(name){
+          var first = byDev[name][0];
+          if(!combinedStart || first > combinedStart) combinedStart = first;
+        });
         fetchError = null;
       })
       .catch(function(err){
@@ -363,6 +455,7 @@
     return {type:"night", start:start, end:end};
   }
 
+  // Returns [current window, the other type's most recent window, ...older].
   function currentAndPastWindows(now, count){
     var midnight = new Date(now); midnight.setHours(0,0,0,0);
     var hour = now.getHours();
@@ -379,7 +472,6 @@
       windows.push(nightWindowFor(prevMidnight2));
       windows.push(dayWindowFor(midnight));
     }
-    // walk backwards from the second entry to build history
     var cursorEnd = windows[1].start;
     while(windows.length < count){
       var cursorMidnight = new Date(cursorEnd); cursorMidnight.setHours(0,0,0,0);
@@ -393,10 +485,11 @@
     return windows;
   }
 
-  // loggingStart = timestamp of the very first event ever recorded, across
-  // all devices. Nothing before it is known to be screen-free -- it's just
-  // unrecorded -- so every window is clipped to start no earlier than that.
-  function longestGapHours(win, now, loggingStart){
+  // times = sorted Date[] for the device (or all devices merged).
+  // loggingStart = when logging began for that scope. Nothing before it is
+  // known to be screen-free -- it's just unrecorded -- so the window is
+  // clipped to start no earlier than that.
+  function longestGap(win, now, times, loggingStart){
     var effectiveStart = (loggingStart && loggingStart > win.start) ? loggingStart : win.start;
     var effectiveEnd = win.end < now ? win.end : now;
 
@@ -404,7 +497,7 @@
       return {hours:null, inProgress: win.end > now, points:[], noData:true, partial:false};
     }
 
-    var within = events.filter(function(e){ return e >= effectiveStart && e <= effectiveEnd; });
+    var within = times.filter(function(t){ return t >= effectiveStart && t <= effectiveEnd; });
     var points = [effectiveStart].concat(within, [effectiveEnd]);
     var longestMs = 0;
     for(var i=1;i<points.length;i++){
@@ -421,123 +514,172 @@
     };
   }
 
+  function windowResults(win, now){
+    var byDevice = {};
+    devices.forEach(function(name){
+      byDevice[name] = longestGap(win, now, timesByDevice[name], timesByDevice[name][0]);
+    });
+    return {
+      combined: longestGap(win, now, allTimes, combinedStart),
+      byDevice: byDevice
+    };
+  }
+
+  // --- formatting -------------------------------------------------------
+
   function fmtHours(h){ return h.toFixed(1); }
   function fmtTime(d){
-    var hh = d.getHours().toString().padStart(2,"0");
-    var mm = d.getMinutes().toString().padStart(2,"0");
-    return hh + ":" + mm;
+    return d.getHours().toString().padStart(2,"0") + ":" + d.getMinutes().toString().padStart(2,"0");
   }
   function fmtDate(d){
     return d.toLocaleDateString(undefined, {weekday:"short", day:"numeric", month:"short"});
   }
+  function fmtWhen(d, now){
+    var sameDay = d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth() && d.getDate()===now.getDate();
+    return sameDay ? fmtTime(d) : fmtDate(d) + " " + fmtTime(d);
+  }
+  function fmtScore(result){
+    return result.noData ? "—" : fmtHours(result.hours) + " hrs" + (result.partial ? " *" : "");
+  }
 
-  function renderTimeline(el, win, result){
-    el.innerHTML = "";
+  function el(tag, className, text){
+    var node = document.createElement(tag);
+    if(className) node.className = className;
+    if(text != null) node.textContent = text;
+    return node;
+  }
+
+  // --- rendering --------------------------------------------------------
+
+  function renderTimeline(container, win, result, times){
+    container.innerHTML = "";
     if(result.noData) return;
     var span = win.end - win.start;
-    events.filter(function(e){ return e >= win.start && e < win.end; }).forEach(function(e){
-      var pct = ((e - win.start) / span) * 100;
-      var tick = document.createElement("div");
-      tick.className = "tick";
-      tick.style.left = pct + "%";
-      el.appendChild(tick);
+    times.forEach(function(t){
+      if(t < win.start || t >= win.end) return;
+      var tick = el("div", "tick");
+      tick.style.left = ((t - win.start) / span * 100) + "%";
+      container.appendChild(tick);
     });
-    // highlight the longest gap segment
-    var pts = result.points;
-    var best = 0, bestI = 0;
+    var pts = result.points, best = 0, bestI = 0;
     for(var i=1;i<pts.length;i++){
       var g = pts[i]-pts[i-1];
       if(g>best){ best=g; bestI=i; }
     }
     if(pts.length>1){
-      var leftPct = ((pts[bestI-1]-win.start)/span)*100;
-      var widthPct = ((pts[bestI]-pts[bestI-1])/span)*100;
-      var mark = document.createElement("div");
-      mark.className = "longest";
-      mark.style.left = leftPct + "%";
-      mark.style.width = Math.max(widthPct,0.4) + "%";
-      el.appendChild(mark);
+      var mark = el("div", "longest");
+      mark.style.left = ((pts[bestI-1]-win.start)/span*100) + "%";
+      mark.style.width = Math.max((pts[bestI]-pts[bestI-1])/span*100, 0.4) + "%";
+      container.appendChild(mark);
     }
   }
 
-  function render(){
+  function renderTile(type, win, now){
+    var res = windowResults(win, now);
+    var result = res.combined;
+    var pill = document.getElementById(type+"-pill");
+    var sub = document.getElementById(type+"-sub");
+    var scoreEl = document.getElementById(type+"-score");
+
+    if(result.noData){
+      scoreEl.textContent = "—";
+      pill.textContent = "No data";
+      sub.textContent = "Logging hadn't started yet for this period.";
+    } else {
+      scoreEl.textContent = fmtHours(result.hours);
+      var partialNote = result.partial ? "Partial — all devices logging from " + fmtTime(result.effectiveStart) + ". " : "";
+      if(result.inProgress){
+        pill.textContent = result.partial ? "Live (partial)" : "Live";
+        sub.textContent = partialNote + "In progress · window ends " + fmtTime(win.end);
+      } else {
+        pill.textContent = result.partial ? "Final (partial)" : "Final";
+        sub.textContent = partialNote + "Completed " + fmtDate(win.end) + ", " + fmtTime(win.start) + "–" + fmtTime(win.end);
+      }
+    }
+    renderTimeline(document.getElementById(type+"-timeline"), win, result, allTimes);
+
+    var list = document.getElementById(type+"-devices");
+    list.innerHTML = "";
+    devices.forEach(function(name){
+      var r = res.byDevice[name];
+      var row = el("div", "dev-row");
+      row.appendChild(el("span", "dev-name", displayName(name)));
+      var tl = el("div", "timeline mini");
+      renderTimeline(tl, win, r, timesByDevice[name]);
+      row.appendChild(tl);
+      row.appendChild(el("span", "dev-val", fmtScore(r)));
+      list.appendChild(row);
+    });
+  }
+
+  function renderHistory(windows, now){
+    var rows = [];
+    windows.slice(2).forEach(function(win){
+      var res = windowResults(win, now);
+      var hasData = !res.combined.noData || devices.some(function(n){ return !res.byDevice[n].noData; });
+      if(hasData) rows.push({win:win, res:res});
+    });
+
+    var wrap = document.getElementById("history-table-wrap");
+    var empty = document.getElementById("history-empty");
+    if(rows.length === 0){
+      wrap.hidden = true; empty.hidden = false;
+      return;
+    }
+    wrap.hidden = false; empty.hidden = true;
+
+    var head = document.getElementById("history-head");
+    head.innerHTML = "";
+    ["Period", "Type", "Combined"].concat(devices.map(displayName)).forEach(function(label){
+      head.appendChild(el("th", null, label));
+    });
+
+    var body = document.getElementById("history-body");
+    body.innerHTML = "";
+    rows.forEach(function(row){
+      var tr = el("tr");
+      tr.appendChild(el("td", null, fmtDate(row.win.start) + ", " + fmtTime(row.win.start) + "–" + fmtTime(row.win.end)));
+      var typeCell = el("td");
+      typeCell.appendChild(el("span", "tag " + row.win.type, row.win.type === "day" ? "Day" : "Night"));
+      tr.appendChild(typeCell);
+      tr.appendChild(el("td", "num", fmtScore(row.res.combined)));
+      devices.forEach(function(name){
+        tr.appendChild(el("td", "num", fmtScore(row.res.byDevice[name])));
+      });
+      body.appendChild(tr);
+    });
+  }
+
+  function tickClock(){
     var now = new Date();
     document.getElementById("clock").textContent =
       now.getHours().toString().padStart(2,"0") + ":" +
       now.getMinutes().toString().padStart(2,"0") + ":" +
       now.getSeconds().toString().padStart(2,"0");
+  }
+
+  function render(){
+    var now = new Date();
 
     if(fetchError){
       setStatus("Couldn't load the event sheet (" + fetchError.message + "). Retrying in the background.", true);
+    } else if(eventCount === 0){
+      setStatus("No interactions logged yet.");
     } else {
-      var lastEvent = events.length ? events[events.length-1] : null;
-      setStatus(events.length
-        ? (events.length + " interactions logged · last one at " + fmtTime(lastEvent) + " on " + fmtDate(lastEvent))
-        : "No interactions logged yet.");
+      var parts = [eventCount + " interactions logged"];
+      devices.forEach(function(name){
+        var arr = timesByDevice[name];
+        parts.push(displayName(name) + " last at " + fmtWhen(arr[arr.length-1], now));
+      });
+      setStatus(parts.join(" · "));
     }
 
     var windows = currentAndPastWindows(now, HISTORY_PERIODS);
-    var loggingStart = events.length ? events[0] : null;
-
-    // Find the most relevant window of each type: the in-progress one if it matches,
-    // otherwise the most recently completed one.
-    function windowForType(type){
-      for(var i=0;i<windows.length;i++){
-        if(windows[i].type===type) return windows[i];
-      }
-      return null;
-    }
-
-    ["day","night"].forEach(function(type){
-      var win = windows[0].type===type ? windows[0] : windows[1].type===type ? windows[1] : windowForType(type);
-      var result = longestGapHours(win, now, loggingStart);
-      var pill = document.getElementById(type+"-pill");
-      var sub = document.getElementById(type+"-sub");
-      var scoreEl = document.getElementById(type+"-score");
-
-      if(result.noData){
-        scoreEl.textContent = "—";
-        pill.textContent = "No data";
-        sub.textContent = "Logging hadn't started yet for this period.";
-      } else {
-        scoreEl.textContent = fmtHours(result.hours);
-        var partialNote = result.partial ? "Partial — logging began at " + fmtTime(result.effectiveStart) + ". " : "";
-        if(result.inProgress){
-          pill.textContent = result.partial ? "Live (partial)" : "Live";
-          sub.textContent = partialNote + "In progress · window ends " + fmtTime(win.end);
-        } else {
-          pill.textContent = result.partial ? "Final (partial)" : "Final";
-          sub.textContent = partialNote + "Completed " + fmtDate(win.end) + ", " + fmtTime(win.start) + "–" + fmtTime(win.end);
-        }
-      }
-      renderTimeline(document.getElementById(type+"-timeline"), win, result);
-    });
-
-    // History table: skip the two "current" windows, drop any with no data
-    // at all (before logging started), show the rest most-recent first.
-    var historyRows = windows.slice(2).filter(function(win){
-      return !longestGapHours(win, now, loggingStart).noData;
-    });
-    var body = document.getElementById("history-body");
-    var table = document.getElementById("history-table");
-    var empty = document.getElementById("history-empty");
-    if(historyRows.length === 0){
-      table.hidden = true; empty.hidden = false;
-    } else {
-      table.hidden = false; empty.hidden = true;
-      body.innerHTML = "";
-      historyRows.forEach(function(win){
-        var result = longestGapHours(win, now, loggingStart);
-        var tr = document.createElement("tr");
-        var periodLabel = fmtDate(win.start) + ", " + fmtTime(win.start) + "–" + fmtTime(win.end);
-        var scoreText = fmtHours(result.hours) + " hrs" + (result.partial ? " *" : "");
-        tr.innerHTML =
-          "<td>" + periodLabel + "</td>" +
-          "<td><span class=\"tag " + win.type + "\">" + (win.type==="day"?"Day":"Night") + "</span></td>" +
-          "<td class=\"num\">" + scoreText + "</td>";
-        body.appendChild(tr);
-      });
-    }
+    var byType = {};
+    windows.slice(0, 2).forEach(function(w){ byType[w.type] = w; });
+    renderTile("day", byType.day, now);
+    renderTile("night", byType.night, now);
+    renderHistory(windows, now);
   }
 
   function refresh(){
@@ -546,9 +688,11 @@
 
   document.getElementById("refresh-btn").addEventListener("click", refresh);
 
+  tickClock();
   refresh();
-  setInterval(render, 1000);      // tick the clock / live gap every second
-  setInterval(refresh, REFRESH_MS); // pull new events periodically
+  setInterval(tickClock, 1000);
+  setInterval(render, RENDER_MS);
+  setInterval(refresh, REFRESH_MS);
 })();
 </script>
 </body>
