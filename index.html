@@ -394,7 +394,7 @@
 </section>
 
 <footer>
-  <p><strong>How day and night are split.</strong> A streak is the time between two interactions, on any device, and is never cut at a clock boundary. A streak counts as <em>night</em> if it overlaps 00:00&ndash;05:00 by 30+ minutes. The night then stretches back over any activity from 22:30 (target bedtime) leading into that streak and forward over any activity until 06:45 (target wake time), so a 3am wake-up stays inside the night. Everything else is day: a screen-free 4&ndash;10pm stays a day streak even if you go to bed at 10:30. Streaks under 15 minutes are ignored in the tables above. A night is recognised once you&rsquo;ve been screen-free past about 00:30.</p>
+  <p><strong>How day and night are split.</strong> A streak is the time between two interactions, on any device, and is never cut at a clock boundary. It counts as day or night according to the check that <em>starts</em> it: a streak that starts from 21:00 until 05:00 is night, and one that starts from 05:00 until 21:00 is day. So a screen-free 4&ndash;10pm is a day streak, sleep that begins with a 22:56 check is a night streak, a wake-up check at 3am starts another night streak, and a check at 5:30am starts a day streak. Night interruptions are separate bursts of activity between midnight and 05:00. Streaks under 15 minutes are ignored in the tables above.</p>
   <p>&ldquo;Combined&rdquo; only counts a gap when <em>every</em> device was quiet, from when the last device began logging. Per-device figures are measured within the same day or night period; * = that device started logging partway through it. Monthly averages leave out the streak or night still in progress.</p>
   <p>Reads directly from your Google Sheet event log. Refreshes automatically every 2 minutes &middot;
   <button id="refresh-btn" type="button">Refresh now</button></p>
@@ -411,13 +411,11 @@
   var RENDER_MS = 15000;
 
   // --- how day and night are split (tweak to suit your routine) ---------
+  // A streak is classified by the time of the check that starts it. Hours are
+  // decimal clock hours (21 = 21:00, 22.5 = 22:30).
+  var NIGHT_FROM_H = 21;            // a streak starting from this hour...
+  var NIGHT_UNTIL_H = 5;            // ...until this hour is night; any other start is day
   var MIN_STREAK_MS = 15 * 60000;   // shorter gaps are just normal use, not a "streak"
-  // Hours are decimal clock hours: 22.5 = 22:30, 6.75 = 06:45.
-  var CORE_START_H = 0;             // hours after midnight in which you should definitely be asleep
-  var CORE_END_H = 5;
-  var MIN_CORE_MS = 30 * 60000;     // a gap is "sleep" once it overlaps the core hours by this much
-  var EVENING_START_H = 22.5;       // target bedtime: activity from here, leading into the sleep gap, joins the night
-  var MORNING_END_H = 6.75;         // target wake time: activity before here, following the sleep gap, joins the night
   var LEAGUE_ROWS = 10;
   var HISTORY_ROWS = 10;
 
@@ -495,46 +493,56 @@
   // --- streaks, nights and days -----------------------------------------
 
   function startOfDay(d){ var x = new Date(d); x.setHours(0,0,0,0); return x; }
-  function atHour(d, hours){
-    var x = new Date(d);
-    x.setHours(Math.floor(hours), Math.round((hours % 1) * 60), 0, 0);
-    return x;
-  }
   function sameDay(a, b){
     return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
   }
+  function hourOf(d){ return d.getHours() + d.getMinutes() / 60; }
 
-  // Interruptions = activity bursts inside a night, not counting the bedtime
-  // burst at the start or (once the night is over) the waking burst at the end.
-  function countInterruptions(times, from, to, ongoing){
-    var clusters = 1;
-    for(var i=from+1;i<=to;i++){
-      if(times[i] - times[i-1] >= MIN_STREAK_MS) clusters++;
-    }
-    return Math.max(0, clusters - (ongoing ? 1 : 2));
+  // A streak is night or day according to the time of the check that starts it.
+  function startsAtNight(d){
+    var h = hourOf(d);
+    return h >= NIGHT_FROM_H || h < NIGHT_UNTIL_H;
   }
 
-  function makePeriod(type, lo, hi, gaps, times, evening){
+  // Interruptions = separate bursts of activity between midnight and the end
+  // of the night, i.e. using a device when you should be asleep.
+  function countInterruptions(times, from, to){
+    var bursts = 0, prev = null;
+    for(var i=from;i<=to;i++){
+      var t = times[i];
+      if(hourOf(t) >= NIGHT_UNTIL_H) continue;
+      if(prev === null || t - prev >= MIN_STREAK_MS) bursts++;
+      prev = t;
+    }
+    return bursts;
+  }
+
+  function makePeriod(type, lo, hi, gaps, times){
     var longest = gaps[lo];
     for(var i=lo+1;i<=hi;i++){
       if(gaps[i].ms > longest.ms) longest = gaps[i];
     }
     var open = gaps[hi].open;
+    var evening = null;
+    if(type === "night"){
+      evening = startOfDay(gaps[lo].start);
+      if(hourOf(gaps[lo].start) < NIGHT_UNTIL_H) evening.setDate(evening.getDate() - 1);
+    }
     return {
       type: type,
       start: gaps[lo].start,
       end: gaps[hi].end,
       ongoing: open,
       longest: longest,
-      evening: evening || null,
+      evening: evening,
       fromLoggingStart: lo === 0,
-      interruptions: type === "night" ? countInterruptions(times, lo, open ? hi : hi + 1, open) : 0
+      interruptions: type === "night" ? countInterruptions(times, lo, open ? hi : hi + 1) : 0
     };
   }
 
   // Turns the merged event times into gaps (streaks), labels each gap day or
-  // night, and groups them into alternating day/night periods. Every period
-  // boundary is an interaction, so no streak is ever split.
+  // night by when it starts, and groups consecutive gaps of the same kind into
+  // periods. Every period boundary is an interaction, so no streak is ever split.
   function analyse(now){
     var times = [];
     if(combinedStart){
@@ -545,49 +553,20 @@
 
     var gaps = out.gaps;
     for(var i=1;i<times.length;i++){
-      gaps.push({start:times[i-1], end:times[i], ms:times[i]-times[i-1], open:false, night:false});
+      gaps.push({start:times[i-1], end:times[i], ms:times[i]-times[i-1], open:false, night:startsAtNight(times[i-1])});
     }
     var last = times[times.length-1];
     if(now > last){
-      gaps.push({start:last, end:now, ms:now-last, open:true, night:false});
+      gaps.push({start:last, end:now, ms:now-last, open:true, night:startsAtNight(last)});
     }
     if(!gaps.length) return out;
 
-    var candidates = [];
-    gaps.forEach(function(g, idx){ if(g.ms >= MIN_CORE_MS) candidates.push(idx); });
-
-    var nights = [];
-    var day = startOfDay(times[0]);
-    day.setDate(day.getDate() - 1);
-    var lastDay = startOfDay(now);
-    for(; day <= lastDay; day.setDate(day.getDate() + 1)){
-      var evening = new Date(day);
-      var nextDay = new Date(evening); nextDay.setDate(nextDay.getDate()+1);
-      var coreStart = atHour(nextDay, CORE_START_H);
-      var coreEnd = atHour(nextDay, CORE_END_H);
-      var qualifying = candidates.filter(function(idx){
-        var g = gaps[idx];
-        if(g.night) return false;
-        return Math.min(g.end, coreEnd) - Math.max(g.start, coreStart) >= MIN_CORE_MS;
-      });
-      if(!qualifying.length) continue;
-
-      var eveningFrom = atHour(evening, EVENING_START_H);
-      var morningTo = atHour(nextDay, MORNING_END_H);
-      var lo = qualifying[0], hi = qualifying[qualifying.length-1];
-      while(lo > 0 && !gaps[lo-1].night && gaps[lo-1].start >= eveningFrom) lo--;
-      while(hi < gaps.length-1 && gaps[hi+1].start < morningTo) hi++;
-      for(var k=lo;k<=hi;k++) gaps[k].night = true;
-      nights.push({lo:lo, hi:hi, evening:evening});
+    var runStart = 0;
+    for(var k=1;k<=gaps.length;k++){
+      if(k < gaps.length && gaps[k].night === gaps[runStart].night) continue;
+      out.periods.push(makePeriod(gaps[runStart].night ? "night" : "day", runStart, k-1, gaps, times));
+      runStart = k;
     }
-
-    var dayFrom = 0;
-    nights.forEach(function(n){
-      if(n.lo > dayFrom) out.periods.push(makePeriod("day", dayFrom, n.lo-1, gaps, times));
-      out.periods.push(makePeriod("night", n.lo, n.hi, gaps, times, n.evening));
-      dayFrom = n.hi + 1;
-    });
-    if(dayFrom < gaps.length) out.periods.push(makePeriod("day", dayFrom, gaps.length-1, gaps, times));
 
     // Monthly buckets: finished day streaks by month they started; finished
     // nights by the month of the evening they began.
@@ -708,7 +687,7 @@
       scoreEl.textContent = "—";
       pill.textContent = "No data";
       sub.textContent = type === "night"
-        ? "No night detected yet. It needs 30+ minutes screen-free between 00:00 and 05:00."
+        ? "No night yet. A night starts with your first check after 21:00."
         : "No day session yet.";
       timeline.innerHTML = "";
       startLabel.textContent = "";

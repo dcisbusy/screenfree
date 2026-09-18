@@ -19,17 +19,18 @@ Every interaction on any device is logged as a timestamp. A streak is the time b
 
 ### Splitting day from night
 
-The dashboard works out where your night starts and ends from the data rather than from fixed clock times.
+Each streak is labelled by the time of the check that **starts** it:
 
-1. A streak is **night** if it overlaps 00:00 to 05:00 by at least 30 minutes.
-2. The night then extends **back** over any activity from 22:30 (your target bedtime) leading into that streak, and **forward** over any activity until 06:45 (your target wake time, covering waking up and checking your phone). Interruptions in the middle, such as a 3am phone check, stay inside the night and are counted as interruptions.
-3. Everything else is **day**. A screen-free 4pm to 10pm therefore stays a day streak even if you go to bed at 10:30pm, because the 22:30 evening cut-off stops it being pulled into the night.
+- A streak that starts from **21:00 until 05:00** is **night**.
+- A streak that starts from **05:00 until 21:00** is **day**.
 
-The bedtime and wake time are targets, not your averages. Using a target means phone use after 22:30 counts against the night even if you usually fall asleep later, and waking later than 06:45 starts the day as soon as you are up.
+So a screen-free 4pm to 10pm is a day streak even if you go to bed at 10:30pm, sleep that begins with a 22:56 check is a night streak, a phone check at 3am starts another night streak, and a check at 5:30am starts a day streak. Streaks are never cut at the boundary: a streak that starts at 20:50 and ends at 22:40 is one day streak.
+
+A streak that starts in the daytime and runs through the whole night is a day streak, because of when it started.
+
+**Interruptions** on the night tile count separate bursts of activity between midnight and 05:00, meaning device use when you should be asleep.
 
 Streaks under 15 minutes are treated as normal use and ignored by the league table and monthly averages. Monthly averages also leave out the streak or night still in progress.
-
-A night is only recognised once you have been screen-free past about 00:30, so tonight's session shows as day until then and is relabelled retroactively.
 
 ### Tuning
 
@@ -37,13 +38,11 @@ The rules are constants near the top of the script in `index.html`:
 
 | Constant | Default | Meaning |
 | --- | --- | --- |
+| `NIGHT_FROM_H` | 21 | A streak starting from this hour is night... |
+| `NIGHT_UNTIL_H` | 5 | ...until this hour. Any other start is day |
 | `MIN_STREAK_MS` | 15 min | Gaps shorter than this are not counted as streaks |
-| `CORE_START_H`, `CORE_END_H` | 0, 5 | Hours after midnight when you should definitely be asleep |
-| `MIN_CORE_MS` | 30 min | Overlap with the core hours needed for a gap to count as sleep |
-| `EVENING_START_H` | 22.5 | Target bedtime: activity from here, leading into sleep, joins the night |
-| `MORNING_END_H` | 6.75 | Target wake time: activity before here, after sleep, joins the night |
 
-Hours are decimal clock hours, so `22.5` is 22:30 and `6.75` is 06:45. Setting `MORNING_END_H` later captures groggy morning phone checks as night, but a screen-free streak that starts before that hour (for example breakfast after an early wake-up) will be counted as night too.
+Hours are decimal clock hours, so `21` is 21:00 and `22.5` is 22:30.
 
 ## Architecture
 
