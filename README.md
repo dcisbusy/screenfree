@@ -9,6 +9,7 @@ There is no server to run. Devices report to a Google Sheet through a tiny Apps 
 ## What it shows
 
 - **Day and Night tiles.** The longest screen-free gap in the current (or most recent) day and night, with a timeline of every interaction and a per-device breakdown alongside the all-devices figure.
+- **Daily score.** A score out of 100 for each calendar day, from your three longest waking streaks, total screen time and phone unlocks.
 - **Longest streaks.** A league table of your 10 longest streaks. Several can come from the same day.
 - **Monthly averages.** For each month: the average of your three longest day streaks, and the average of your nightly longest streak.
 - **Daily activity.** For each of the last 14 days, active time for each computer and pickups for each phone.
@@ -47,6 +48,25 @@ The rules are constants near the top of the script in `index.html`:
 
 Hours are decimal clock hours, so `21` is 21:00 and `22.5` is 22:30.
 
+## Daily score
+
+Each calendar day (00:00 to 23:59) gets a score out of 100:
+
+| Component | Points | How it is scored |
+| --- | --- | --- |
+| Three longest waking streaks | 50 | Each streak earns its length divided by 3 hours, capped at 1. The three are averaged. A missing streak counts as 0. |
+| Total screen time | 30 | Full marks at 1 hour or less, falling in a straight line to 0 at 8 hours. |
+| Phone unlocks | 20 | Full marks at 20 or fewer, falling in a straight line to 0 at 100. |
+
+Each component is rounded before adding, so the breakdown always sums to the total.
+
+- **Waking streaks only.** Streaks that start from 21:00 until 05:00 do not count, so sleep does not inflate the score. Each streak belongs to the day it starts and is clipped at midnight. Screen time and unlocks cover the whole 00:00 to 23:59, so a 2am scroll still costs you.
+- **Screen time** is computer active time (pings x `PING_SECONDS`) plus phone time from each `unlock` to the next `screen_off`.
+- **Phone time counts as activity.** The time between an unlock and the following screen-off is treated as activity, so a 40 minute video is not mistaken for a 40 minute screen-free streak. An unlock with no screen-off within 3 hours is treated as a missed ping and ignored.
+- **When a day is scored.** Every device must have been logging for the whole day, and the phone must be sending event types (see below). Other days show a dash with the reason. Today's row shows a score "so far" that changes as the day goes on.
+
+The targets are constants near the top of the script: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_FULL_H`, `SCREEN_FULL_H`, `SCREEN_ZERO_H`, `UNLOCK_FULL`, `UNLOCK_ZERO` and `MAX_PHONE_SESSION_MS`.
+
 ## Architecture
 
 ```
@@ -65,7 +85,7 @@ work laptop (script)     ─┘        (writes)         (event log)          (re
 ### 1. The sheet
 
 1. Create a Google Sheet and rename the first tab to `Events`.
-2. Add the header row `Timestamp | Device`.
+2. Add the header row `Timestamp | Device | Event`.
 3. Share it: **Anyone with the link → Viewer**.
 4. Copy the sheet ID from its URL (the string between `/d/` and `/edit`).
 
@@ -77,29 +97,35 @@ In the sheet, open **Extensions → Apps Script**, paste this in, and set your o
 const SHARED_SECRET = 'CHANGE_ME_TO_A_RANDOM_STRING';
 const SHEET_NAME = 'Events';
 
-function logEvent(secret, device) {
+// Columns: Timestamp | Device | Event. The optional event is one of
+// unlock, screen_on, screen_off; computers just leave it blank.
+function logEvent(secret, device, eventType) {
   if (secret !== SHARED_SECRET) {
     return ContentService.createTextOutput('forbidden');
   }
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  sheet.appendRow([new Date(), String(device || 'unknown').slice(0, 40)]);
+  sheet.appendRow([
+    new Date(),
+    String(device || 'unknown').slice(0, 40),
+    String(eventType || '').slice(0, 20)
+  ]);
   return ContentService.createTextOutput('ok');
 }
 
-// JSON POST body: {"secret": "...", "device": "..."}
+// JSON POST body: {"secret": "...", "device": "...", "event": "..."}
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
-    return logEvent(body.secret, body.device);
+    return logEvent(body.secret, body.device, body.event);
   } catch (err) {
     return ContentService.createTextOutput('error: ' + err);
   }
 }
 
-// Plain URL: .../exec?secret=...&device=...
+// Plain URL: .../exec?secret=...&device=...&event=...
 function doGet(e) {
   try {
-    return logEvent(e.parameter.secret, e.parameter.device);
+    return logEvent(e.parameter.secret, e.parameter.device, e.parameter.event);
   } catch (err) {
     return ContentService.createTextOutput('error: ' + err);
   }
@@ -143,16 +169,19 @@ SendPing() {
 
 To start it at login without admin rights, put a shortcut to the script in the folder opened by `Win+R` → `shell:startup`.
 
-**Android, using an automation app** (MacroDroid, Tasker, or similar). Create two automations, one triggered by *screen on* and one by *screen off*, each sending an HTTP **GET** request to the web app URL with two parameters:
+**Android, using an automation app** (MacroDroid, Tasker, or similar). Create three automations, each sending an HTTP **GET** request to the web app URL with three parameters:
 
-| Parameter | Value |
-| --- | --- |
-| `secret` | your shared secret |
-| `device` | `phone` |
+| Trigger | `secret` | `device` | `event` |
+| --- | --- | --- | --- |
+| Phone unlocked | your shared secret | `phone` | `unlock` |
+| Screen turns on | your shared secret | `phone` | `screen_on` |
+| Screen turns off | your shared secret | `phone` | `screen_off` |
+
+The unlock and screen-off events are what the daily score uses for unlock counts and phone screen time. The screen-on automation is optional.
 
 Exclude the automation app from battery optimisation, or Android will eventually stop it (see [dontkillmyapp.com](https://dontkillmyapp.com)).
 
-**Any other device** just needs to request `<web app URL>?secret=<secret>&device=<name>` whenever there is activity.
+**Any other device** just needs to request `<web app URL>?secret=<secret>&device=<name>` whenever there is activity. Computers leave `event` out.
 
 ### 4. The dashboard
 
@@ -168,7 +197,7 @@ The combined figures only count from when the **last** device started logging, b
 ## Daily activity numbers
 
 - **Computers: active time** = pings x `PING_SECONDS`. A ping means there was keyboard or mouse input in that 10-second slot, so it measures time spent actively typing or clicking. Reading or watching without touching anything is not counted.
-- **Phones: pickups** = screen-on events, estimated as half the pings because each session sends one ping when the screen turns on and one when it turns off. This assumes both the screen-on and screen-off automations are set up.
+- **Phones: pickups** = screen-on events, estimated as half the pings because each session sends one ping when the screen turns on and one when it turns off. This assumes both the screen-on and screen-off automations are set up. Once the phone sends event types, the daily score table shows exact unlock counts instead.
 - A device counts as a phone if its name matches `PHONE_LIKE`; anything else is treated as a computer.
 
 ## Limitations

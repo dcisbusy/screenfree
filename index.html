@@ -227,6 +227,11 @@
   }
 
   section.block{ margin-bottom:32px; }
+  .hint{
+    font-size:0.8rem;
+    color:var(--text-muted);
+    margin:-4px 0 10px;
+  }
   h2{
     font-family:"Fraunces", Georgia, serif;
     font-weight:600;
@@ -263,6 +268,10 @@
     font-family:"IBM Plex Mono", ui-monospace, monospace;
     font-variant-numeric: tabular-nums;
     font-weight:500;
+  }
+  td.score-cell{
+    font-size:1.05rem;
+    font-weight:600;
   }
   td.rank{
     font-family:"IBM Plex Mono", ui-monospace, monospace;
@@ -366,6 +375,18 @@
 </div>
 
 <section class="block">
+  <h2>Daily score</h2>
+  <p class="hint">Out of 100: 50 for your three longest waking streaks, 30 for total screen time, 20 for phone unlocks. Today updates as the day goes on.</p>
+  <div class="empty" id="score-empty">No activity logged yet.</div>
+  <div class="table-wrap" id="score-table-wrap" hidden>
+    <table>
+      <thead><tr><th>Day</th><th>Score</th><th>Top 3 streaks</th><th>Screen time</th><th>Unlocks</th></tr></thead>
+      <tbody id="score-body"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="block">
   <h2>Longest streaks</h2>
   <div class="empty" id="league-empty">No screen-free streaks over 15 minutes yet.</div>
   <div class="table-wrap" id="league-table-wrap" hidden>
@@ -411,6 +432,7 @@
 
 <footer>
   <p><strong>How day and night are split.</strong> A streak is the time between two interactions, on any device, and is never cut at a clock boundary. It counts as day or night according to the check that <em>starts</em> it: a streak that starts from 21:00 until 05:00 is night, and one that starts from 05:00 until 21:00 is day. So a screen-free 4&ndash;10pm is a day streak, sleep that begins with a 22:56 check is a night streak, a wake-up check at 3am starts another night streak, and a check at 5:30am starts a day streak. Night interruptions are separate bursts of activity between midnight and 05:00. Streaks under 15 minutes are ignored in the tables above.</p>
+  <p><strong>Daily score.</strong> Out of 100. Up to 50 points for your three longest waking streaks (each earns full marks at 3 hours; streaks starting from 21:00 to 05:00 don&rsquo;t count, so sleep doesn&rsquo;t inflate the score), up to 30 for total screen time (full marks at 1 hour or less, zero at 8 hours), and up to 20 for phone unlocks (full marks at 20 or fewer, zero at 100). Screen time is computer active time plus phone time from unlock to screen-off. A day is only scored once every device was logging all day and the phone is sending event types (unlock, screen_on, screen_off). Phone time between an unlock and the next screen-off counts as activity, not as a screen-free streak.</p>
   <p><strong>Daily activity.</strong> For computers, active time is the number of pings times 10 seconds; a ping means there was keyboard or mouse input in that 10-second slot, so time spent reading or watching without touching anything isn&rsquo;t counted. For phones, pickups are screen-on events, estimated as half the screen on/off pings. Days are midnight to midnight; * = logging started partway through that day.</p>
   <p>&ldquo;Combined&rdquo; only counts a gap when <em>every</em> device was quiet, from when the last device began logging. Per-device figures are measured within the same day or night period; * = that device started logging partway through it. Monthly averages leave out the streak or night still in progress.</p>
   <p>Reads directly from your Google Sheet event log. Refreshes automatically every 2 minutes &middot;
@@ -436,6 +458,16 @@
   var PING_SECONDS = 10;            // a computer ping means input in a slot this long
   var PHONE_LIKE = /phone|mobile|tablet/i;  // devices shown as pickups rather than active time
   var DAILY_ROWS = 14;
+  var SCORE_STREAK_POINTS = 50;     // daily score, out of 100
+  var SCORE_SCREEN_POINTS = 30;
+  var SCORE_UNLOCK_POINTS = 20;
+  var STREAK_FULL_H = 3;            // each of the three streaks earns full marks at this length
+  var SCREEN_FULL_H = 1;            // screen time up to this earns full marks...
+  var SCREEN_ZERO_H = 8;            // ...falling in a straight line to zero at this
+  var UNLOCK_FULL = 20;             // unlocks up to this earn full marks...
+  var UNLOCK_ZERO = 100;            // ...falling to zero at this
+  var MAX_PHONE_SESSION_MS = 3 * 3600000;  // an unlock with no screen-off inside this is treated as a missed ping
+  var TICK_MS = 60000;              // phone sessions count as activity, marked once a minute
   var LEAGUE_ROWS = 10;
   var HISTORY_ROWS = 10;
 
@@ -444,6 +476,9 @@
   var devices = [];            // sorted device names
   var timesByDevice = {};      // name -> sorted Date[]
   var allTimes = [];           // every device merged, sorted Date[]
+  var gapTimesByDevice = {};   // pings plus a tick every minute of phone use, for streak maths
+  var allGapTimes = [];
+  var phoneInfo = {typedStart: null, unlocks: {}, ms: {}, ticks: {}};
   var combinedStart = null;    // latest first-event across devices
   var eventCount = 0;
   var fetchError = null;
@@ -485,15 +520,29 @@
           var d = parseGvizDate(c[0].v);
           if(!d) continue;
           var dev = (c[1] && c[1].v != null) ? String(c[1].v).trim().toLowerCase() : "";
-          parsed.push({t:d, device: dev || "unknown"});
+          var evt = (c[2] && c[2].v != null) ? String(c[2].v).trim().toLowerCase().replace(/[\s-]+/g, "_") : "";
+          parsed.push({t:d, device: dev || "unknown", event: evt});
         }
         parsed.sort(function(a,b){ return a.t - b.t; });
 
-        var byDev = Object.create(null), all = [];
+        var byDev = Object.create(null), typed = Object.create(null), all = [];
         parsed.forEach(function(e){
           all.push(e.t);
           (byDev[e.device] = byDev[e.device] || []).push(e.t);
+          (typed[e.device] = typed[e.device] || []).push(e);
         });
+        var info = buildPhoneInfo(typed, new Date());
+        var gapByDev = Object.create(null), allGap = [];
+        Object.keys(byDev).forEach(function(name){
+          var withTicks = byDev[name].concat(info.ticks[name] || []);
+          withTicks.sort(function(a, b){ return a - b; });
+          gapByDev[name] = withTicks;
+          allGap = allGap.concat(withTicks);
+        });
+        allGap.sort(function(a, b){ return a - b; });
+        phoneInfo = info;
+        gapTimesByDevice = gapByDev;
+        allGapTimes = allGap;
         allTimes = all;
         timesByDevice = byDev;
         devices = Object.keys(byDev).sort();
@@ -508,6 +557,58 @@
       .catch(function(err){
         fetchError = err;
       });
+  }
+
+  // --- phone sessions ---------------------------------------------------
+
+  function isPhone(name){ return PHONE_LIKE.test(name); }
+  function dayKey(d){ return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); }
+
+  // From each phone's typed events, works out unlock counts per day, phone
+  // screen time per day (unlock to the next screen_off) and a tick every
+  // minute during each session so streak maths treats phone use as activity.
+  function buildPhoneInfo(typed, now){
+    var info = {typedStart: null, unlocks: Object.create(null), ms: Object.create(null), ticks: Object.create(null)};
+
+    function addSpan(start, end){
+      var cursor = new Date(start);
+      while(cursor < end){
+        var nextMidnight = startOfDay(cursor);
+        nextMidnight.setDate(nextMidnight.getDate() + 1);
+        var stop = end < nextMidnight ? end : nextMidnight;
+        var key = dayKey(cursor);
+        info.ms[key] = (info.ms[key] || 0) + (stop - cursor);
+        cursor = stop;
+      }
+    }
+
+    Object.keys(typed).forEach(function(name){
+      if(!isPhone(name)) return;
+      var ticks = info.ticks[name] = [];
+      var unlockedAt = null;
+
+      function closeSession(end){
+        addSpan(unlockedAt, end);
+        for(var t = unlockedAt.getTime() + TICK_MS; t < end.getTime(); t += TICK_MS) ticks.push(new Date(t));
+        unlockedAt = null;
+      }
+
+      typed[name].forEach(function(e){
+        if(!e.event) return;
+        if(info.typedStart === null || e.t < info.typedStart) info.typedStart = e.t;
+        if(e.event === "unlock"){
+          var key = dayKey(e.t);
+          info.unlocks[key] = (info.unlocks[key] || 0) + 1;
+          if(unlockedAt !== null && e.t - unlockedAt > MAX_PHONE_SESSION_MS) unlockedAt = null;
+          if(unlockedAt === null) unlockedAt = e.t;
+        } else if(e.event === "screen_off"){
+          if(unlockedAt !== null && e.t - unlockedAt <= MAX_PHONE_SESSION_MS) closeSession(e.t);
+          else unlockedAt = null;
+        }
+      });
+      if(unlockedAt !== null && now - unlockedAt <= MAX_PHONE_SESSION_MS) closeSession(now);
+    });
+    return info;
   }
 
   // --- streaks, nights and days -----------------------------------------
@@ -566,7 +667,7 @@
   function analyse(now){
     var times = [];
     if(combinedStart){
-      times = allTimes.filter(function(t){ return t >= combinedStart; });
+      times = allGapTimes.filter(function(t){ return t >= combinedStart; });
     }
     var out = {times: times, gaps: [], periods: [], months: {}};
     if(!times.length) return out;
@@ -688,7 +789,7 @@
   function deviceResults(win, now){
     var byDevice = {};
     devices.forEach(function(name){
-      byDevice[name] = longestGap(win, now, timesByDevice[name], timesByDevice[name][0]);
+      byDevice[name] = longestGap(win, now, gapTimesByDevice[name], timesByDevice[name][0]);
     });
     return byDevice;
   }
@@ -739,7 +840,7 @@
       var row = el("div", "dev-row");
       row.appendChild(el("span", "dev-name", displayName(name)));
       var tl = el("div", "timeline mini");
-      renderTimeline(tl, win, r, timesByDevice[name]);
+      renderTimeline(tl, win, r, gapTimesByDevice[name]);
       row.appendChild(tl);
       row.appendChild(el("span", "dev-val", fmtScore(r)));
       list.appendChild(row);
@@ -853,8 +954,6 @@
     });
   }
 
-  function isPhone(name){ return PHONE_LIKE.test(name); }
-  function dayKey(d){ return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); }
   function fmtDuration(minutes){
     var m = Math.round(minutes);
     return m >= 60 ? Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m" : m + "m";
@@ -867,15 +966,7 @@
     empty.hidden = devices.length !== 0;
     if(devices.length === 0) return;
 
-    var counts = {};
-    devices.forEach(function(name){
-      var byDay = Object.create(null);
-      timesByDevice[name].forEach(function(t){
-        var key = dayKey(t);
-        byDay[key] = (byDay[key] || 0) + 1;
-      });
-      counts[name] = byDay;
-    });
+    var counts = pingCounts();
 
     var head = document.getElementById("daily-head");
     head.innerHTML = "";
@@ -913,6 +1004,126 @@
     }
   }
 
+  function pingCounts(){
+    var counts = {};
+    devices.forEach(function(name){
+      var byDay = Object.create(null);
+      timesByDevice[name].forEach(function(t){
+        var key = dayKey(t);
+        byDay[key] = (byDay[key] || 0) + 1;
+      });
+      counts[name] = byDay;
+    });
+    return counts;
+  }
+
+  // 1 at or below `full`, 0 at or above `zero`, a straight line in between.
+  function fall(x, full, zero){
+    if(x <= full) return 1;
+    if(x >= zero) return 0;
+    return (zero - x) / (zero - full);
+  }
+
+  function computeDailyScores(analysis, now){
+    // Waking streaks belong to the day they start and are clipped at midnight.
+    var streaksByDay = Object.create(null);
+    analysis.gaps.forEach(function(g){
+      if(g.night) return;
+      var nextMidnight = startOfDay(g.start);
+      nextMidnight.setDate(nextMidnight.getDate() + 1);
+      var len = Math.min(g.end, nextMidnight) - g.start;
+      if(len <= 0) return;
+      var key = dayKey(g.start);
+      (streaksByDay[key] = streaksByDay[key] || []).push(len);
+    });
+
+    var counts = pingCounts();
+    var hasPhone = devices.some(isPhone);
+    var today = startOfDay(now);
+    var firstDay = allTimes.length ? startOfDay(allTimes[0]) : today;
+    var rows = [];
+
+    for(var i=0;i<DAILY_ROWS;i++){
+      var day = new Date(today); day.setDate(day.getDate() - i);
+      if(day < firstDay) break;
+      var key = dayKey(day);
+
+      var computerMs = 0;
+      devices.forEach(function(name){
+        if(!isPhone(name)) computerMs += (counts[name][key] || 0) * PING_SECONDS * 1000;
+      });
+      var phoneMs = phoneInfo.ms[key] || 0;
+      var top = (streaksByDay[key] || []).slice().sort(function(a, b){ return b - a; }).slice(0, 3);
+      var row = {day: day, isToday: i === 0, reason: null, top: top, computerMs: computerMs, phoneMs: phoneMs, unlocks: phoneInfo.unlocks[key] || 0};
+
+      if(!combinedStart || combinedStart > day){
+        row.reason = "logging started mid-day";
+      } else if(hasPhone && (phoneInfo.typedStart === null || phoneInfo.typedStart > day)){
+        row.reason = "phone not sending event types yet";
+      } else {
+        var streakShare = 0;
+        for(var k=0;k<3;k++) streakShare += Math.min((top[k] || 0) / 3600000 / STREAK_FULL_H, 1);
+        var screenH = (computerMs + phoneMs) / 3600000;
+        row.pts = {
+          streak: Math.round(SCORE_STREAK_POINTS * streakShare / 3),
+          screen: Math.round(SCORE_SCREEN_POINTS * fall(screenH, SCREEN_FULL_H, SCREEN_ZERO_H)),
+          unlock: Math.round(hasPhone ? SCORE_UNLOCK_POINTS * fall(row.unlocks, UNLOCK_FULL, UNLOCK_ZERO) : SCORE_UNLOCK_POINTS)
+        };
+        row.total = row.pts.streak + row.pts.screen + row.pts.unlock;
+      }
+      rows.push(row);
+    }
+    return {rows: rows, hasPhone: hasPhone};
+  }
+
+  function renderScore(analysis, now){
+    var wrap = document.getElementById("score-table-wrap");
+    var empty = document.getElementById("score-empty");
+    wrap.hidden = devices.length === 0;
+    empty.hidden = devices.length !== 0;
+    if(devices.length === 0) return;
+
+    var result = computeDailyScores(analysis, now);
+    var body = document.getElementById("score-body");
+    body.innerHTML = "";
+    result.rows.forEach(function(row){
+      var tr = el("tr");
+      tr.appendChild(el("td", null, fmtDate(row.day) + (row.isToday ? " (so far)" : "")));
+
+      var scoreCell = el("td", "num score-cell");
+      if(row.reason){
+        scoreCell.textContent = "\u2014";
+        scoreCell.appendChild(el("div", "cell-sub", row.reason));
+      } else {
+        scoreCell.textContent = String(row.total);
+        scoreCell.appendChild(el("div", "cell-sub",
+          "streaks " + Math.round(row.pts.streak) + " \u00b7 screen " + Math.round(row.pts.screen) + " \u00b7 unlocks " + Math.round(row.pts.unlock)));
+      }
+      tr.appendChild(scoreCell);
+
+      var streakCell = el("td", "num");
+      var screenCell = el("td", "num");
+      var unlockCell = el("td", "num");
+      if(row.reason){
+        streakCell.textContent = screenCell.textContent = unlockCell.textContent = "\u2014";
+      } else {
+        streakCell.textContent = row.top.length
+          ? row.top.map(function(ms){ return fmtHours(ms / 3600000); }).join(" \u00b7 ") + " hrs"
+          : "\u2014";
+        screenCell.textContent = fmtDuration((row.computerMs + row.phoneMs) / 60000);
+        if(result.hasPhone){
+          screenCell.appendChild(el("div", "cell-sub",
+            "computers " + fmtDuration(row.computerMs / 60000) + " \u00b7 phone " + fmtDuration(row.phoneMs / 60000)));
+        }
+        unlockCell.textContent = result.hasPhone ? String(row.unlocks) : "\u2014";
+      }
+      tr.appendChild(streakCell);
+      tr.appendChild(screenCell);
+      tr.appendChild(unlockCell);
+      body.appendChild(tr);
+    });
+  }
+
   function tickClock(){
     var now = new Date();
     document.getElementById("clock").textContent =
@@ -943,6 +1154,7 @@
 
     renderTile("day", latest.day, now, analysis.times);
     renderTile("night", latest.night, now, analysis.times);
+    renderScore(analysis, now);
     renderLeague(analysis);
     renderMonthly(analysis);
     renderDaily(now);
