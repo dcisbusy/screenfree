@@ -61,8 +61,8 @@ Each calendar day (00:00 to 23:59) gets a score out of 100:
 Each component is rounded before adding, so the breakdown always sums to the total.
 
 - **Waking streaks only.** Streaks that start from 21:00 until 05:00 do not count, so sleep does not inflate the score. Each streak belongs to the day it starts and is clipped at midnight. Screen time and unlocks cover the whole 00:00 to 23:59, so a 2am scroll still costs you.
-- **Screen time** is computer active time (pings x `PING_SECONDS`) plus phone time from each `unlock` to the next `screen_off`.
-- **Phone time counts as activity.** The time between an unlock and the following screen-off is treated as activity, so a 40 minute video is not mistaken for a 40 minute screen-free streak. An unlock with no screen-off within 3 hours is treated as a missed ping and ignored.
+- **Screen time** is computer active time (pings x `PING_SECONDS`) plus phone time from each `unlock` to the next `lock`.
+- **Phone time counts as activity.** The time between an unlock and the following lock is treated as activity, so a 40 minute video is not mistaken for a 40 minute screen-free streak. An unlock with no lock within 3 hours is treated as a missed ping and ignored.
 - **When a day is scored.** Every device must have been logging for the whole day, and the phone must be sending event types (see below). Other days show a dash with the reason. Today's row shows a score "so far" that changes as the day goes on.
 
 The targets are constants near the top of the script: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_FULL_H`, `SCREEN_FULL_H`, `SCREEN_ZERO_H`, `UNLOCK_FULL`, `UNLOCK_ZERO` and `MAX_PHONE_SESSION_MS`.
@@ -98,7 +98,7 @@ const SHARED_SECRET = 'CHANGE_ME_TO_A_RANDOM_STRING';
 const SHEET_NAME = 'Events';
 
 // Columns: Timestamp | Device | Event. The optional event is one of
-// unlock, screen_on, screen_off; computers just leave it blank.
+// unlock or lock (the phone's two automations); computers leave it blank.
 function logEvent(secret, device, eventType) {
   if (secret !== SHARED_SECRET) {
     return ContentService.createTextOutput('forbidden');
@@ -169,15 +169,14 @@ SendPing() {
 
 To start it at login without admin rights, put a shortcut to the script in the folder opened by `Win+R` → `shell:startup`.
 
-**Android, using an automation app** (MacroDroid, Tasker, or similar). Create three automations, each sending an HTTP **GET** request to the web app URL with three parameters:
+**Android, using an automation app** (MacroDroid, Tasker, or similar). Create two automations that each request a URL, one when the phone is unlocked and one when it is locked. If your app only takes a URL, put the whole address including the `?` part in the URL field and leave any parameter fields empty.
 
-| Trigger | `secret` | `device` | `event` |
-| --- | --- | --- | --- |
-| Phone unlocked | your shared secret | `phone` | `unlock` |
-| Screen turns on | your shared secret | `phone` | `screen_on` |
-| Screen turns off | your shared secret | `phone` | `screen_off` |
+| Trigger | URL |
+| --- | --- |
+| Phone unlocked | `<web app URL>?secret=<secret>&device=phone&event=unlock` |
+| Phone locked | `<web app URL>?secret=<secret>&device=phone&event=lock` |
 
-The unlock and screen-off events are what the daily score uses for unlock counts and phone screen time. The screen-on automation is optional.
+The unlock and lock events are what the daily score uses for unlock counts and phone screen time (unlock to the next lock). `screen_off` is accepted as another name for `lock`, and other events such as `screen_on` are ignored.
 
 Exclude the automation app from battery optimisation, or Android will eventually stop it (see [dontkillmyapp.com](https://dontkillmyapp.com)).
 
@@ -197,13 +196,13 @@ The combined figures only count from when the **last** device started logging, b
 ## Daily activity numbers
 
 - **Computers: active time** = pings x `PING_SECONDS`. A ping means there was keyboard or mouse input in that 10-second slot, so it measures time spent actively typing or clicking. Reading or watching without touching anything is not counted.
-- **Phones: pickups** = screen-on events, estimated as half the pings because each session sends one ping when the screen turns on and one when it turns off. This assumes both the screen-on and screen-off automations are set up. Once the phone sends event types, the daily score table shows exact unlock counts instead.
+- **Phones: pickups** are estimated as half the pings, because each pickup sends one ping on unlock and one on lock. Once the phone sends event types, the daily score table shows exact unlock counts instead.
 - A device counts as a phone if its name matches `PHONE_LIKE`; anything else is treated as a computer.
 
 ## Limitations
 
 - **Missing pings look like screen-free time.** If a logger stops (the phone kills the automation app, the laptop is offline while you use it), the gap appears as a streak. This is the main way scores can be wrong.
-- **Phone logging is coarse.** It sees the screen turning on and off, not individual taps, so time spent reading a lit screen without touching it is not detected as activity by itself.
+- **Phone logging is coarse.** It sees the phone unlocking and locking, not individual taps. Time between an unlock and the next lock counts as screen time, but an unlock with no lock within 3 hours is treated as a missed ping and ignored.
 - **Timezone.** Day and night use the clock of the browser viewing the page, and the sheet's timezone should match yours.
 - **Privacy.** The sheet holds only timestamps and device names, but anyone with its link can read them, and the dashboard URL is public. Do not share either.
 - **Growth.** The dashboard downloads the whole sheet on every refresh, so it will slow down after many months of data.
