@@ -50,22 +50,59 @@ Hours are decimal clock hours, so `21` is 21:00 and `22.5` is 22:30.
 
 ## Daily score
 
-Each calendar day (00:00 to 23:59) gets a score out of 100:
+Each calendar day (00:00 to 23:59) gets a score out of 100: streak points + screen points + unlock points, each rounded to a whole number before adding, so the breakdown shown always sums to the total.
 
-| Component | Points | How it is scored |
-| --- | --- | --- |
-| Three longest waking streaks | 50 | Each streak earns its length divided by 3 hours, capped at 1. The three are averaged. A missing streak counts as 0. |
-| Total screen time | 30 | Full marks at 1 hour or less, falling in a straight line to 0 at 8 hours. |
-| Phone unlocks | 20 | Full marks at 20 or fewer, falling in a straight line to 0 at 100. |
+### 1. Streak points (0–50)
 
-Each component is rounded before adding, so the breakdown always sums to the total.
+Take the day's three longest **waking streaks** — a streak counts as waking if it starts anywhere from 05:00 up to (but not including) 21:00; one starting from 21:00 up to 05:00 is a night streak and is excluded entirely (see [Splitting day from night](#splitting-day-from-night)). Each streak is clipped so it doesn't run past midnight into the next day. A missing streak (fewer than three that day) counts as 0 hours.
 
-- **Waking streaks only.** Streaks that start from 21:00 until 05:00 do not count, so sleep does not inflate the score. Each streak belongs to the day it starts and is clipped at midnight. Screen time and unlocks cover the whole 00:00 to 23:59, so a 2am scroll still costs you.
-- **Screen time** is computer active time (pings x `PING_SECONDS`) plus phone time from each `unlock` to the next `lock`.
-- **Phone time counts as activity.** The time between an unlock and the following lock is treated as activity, so a 40 minute video is not mistaken for a 40 minute screen-free streak. An unlock with no lock within 3 hours is treated as a missed ping and ignored.
-- **When a day is scored.** Every device must have been logging for the whole day, and the phone must be sending event types (see below). Other days show a dash with the reason. Today's row shows a score "so far" that changes as the day goes on.
+For each of the three:
 
-The targets are constants near the top of the script: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_FULL_H`, `SCREEN_FULL_H`, `SCREEN_ZERO_H`, `UNLOCK_FULL`, `UNLOCK_ZERO` and `MAX_PHONE_SESSION_MS`.
+```
+share = min(hours / STREAK_FULL_H, 1)        // STREAK_FULL_H = 3
+```
+
+```
+streak points = SCORE_STREAK_POINTS × (share₁ + share₂ + share₃) / 3      // SCORE_STREAK_POINTS = 50
+```
+
+Three streaks of 3+ hours each maxes this out at 50.
+
+### 2. Screen time points (0–30)
+
+Screen time = computer active time + phone active time, for the **whole calendar day** (00:00–23:59, not just waking hours — a 2am scroll still costs you here even though it's excluded from streak points):
+
+- **Computer:** number of pings × `PING_SECONDS` (10 seconds — a ping means there was keyboard or mouse input in that slot).
+- **Phone:** sum of each `unlock`-to-`lock` session length. This is why phone time counts as activity rather than being mistaken for a screen-free streak: a 40 minute video doesn't look like 40 minutes screen-free. An unlock with no `lock` within `MAX_PHONE_SESSION_MS` (3 hours) is treated as a missed ping and ignored.
+
+```
+hours = total screen time in hours
+points = SCORE_SCREEN_POINTS                                                       if hours ≤ SCREEN_FULL_H
+points = SCORE_SCREEN_POINTS × (SCREEN_ZERO_H − hours) / (SCREEN_ZERO_H − SCREEN_FULL_H)   if SCREEN_FULL_H < hours < SCREEN_ZERO_H
+points = 0                                                                          if hours ≥ SCREEN_ZERO_H
+```
+
+Currently `SCORE_SCREEN_POINTS = 30`, `SCREEN_FULL_H = 1`, `SCREEN_ZERO_H = 5`: full marks at 1 hour or less, zero at 5 hours or more.
+
+### 3. Unlock points (0–20)
+
+Unlocks = count of `unlock` events that actually **start a new phone session** — a repeat `unlock` ping received while a session is already open (some automation setups fire it more than once per pickup) does not count again.
+
+```
+points = SCORE_UNLOCK_POINTS                                                    if unlocks ≤ UNLOCK_FULL
+points = SCORE_UNLOCK_POINTS × (UNLOCK_ZERO − unlocks) / (UNLOCK_ZERO − UNLOCK_FULL)   if UNLOCK_FULL < unlocks < UNLOCK_ZERO
+points = 0                                                                       if unlocks ≥ UNLOCK_ZERO
+```
+
+Currently `SCORE_UNLOCK_POINTS = 20`, `UNLOCK_FULL = 20`, `UNLOCK_ZERO = 50`: full marks at 20 unlocks or fewer, zero at 50 or more. If there is no phone at all, this defaults to full marks.
+
+### When a day is scored
+
+Every device must have been logging for the whole day, and if a phone is present it must have been sending `unlock`/`lock` event types for the whole day. Otherwise the row shows a dash with the reason instead of a score. Today's row shows a score "so far" that changes as the day goes on.
+
+### Tuning
+
+All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_FULL_H`, `SCREEN_FULL_H`, `SCREEN_ZERO_H`, `UNLOCK_FULL`, `UNLOCK_ZERO` and `MAX_PHONE_SESSION_MS`.
 
 ## Architecture
 
