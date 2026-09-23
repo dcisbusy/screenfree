@@ -597,10 +597,16 @@
         if(!e.event) return;
         if(info.typedStart === null || e.t < info.typedStart) info.typedStart = e.t;
         if(e.event === "unlock"){
-          var key = dayKey(e.t);
-          info.unlocks[key] = (info.unlocks[key] || 0) + 1;
           if(unlockedAt !== null && e.t - unlockedAt > MAX_PHONE_SESSION_MS) unlockedAt = null;
-          if(unlockedAt === null) unlockedAt = e.t;
+          // Only count it if it actually starts a new session -- a repeat
+          // unlock ping while one is already open (seen in practice: some
+          // automation setups fire "unlock" more than once per pickup)
+          // must not inflate the day's unlock tally.
+          if(unlockedAt === null){
+            unlockedAt = e.t;
+            var key = dayKey(e.t);
+            info.unlocks[key] = (info.unlocks[key] || 0) + 1;
+          }
         } else if(e.event === "lock" || e.event === "screen_off"){
           if(unlockedAt !== null && e.t - unlockedAt <= MAX_PHONE_SESSION_MS) closeSession(e.t);
           else unlockedAt = null;
