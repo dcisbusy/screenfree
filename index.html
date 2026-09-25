@@ -380,7 +380,7 @@
   <div class="empty" id="score-empty">No activity logged yet.</div>
   <div class="table-wrap" id="score-table-wrap" hidden>
     <table>
-      <thead><tr><th>Day</th><th>Score</th><th>Top 3 streaks</th><th>Screen time</th><th>Unlocks</th></tr></thead>
+      <thead><tr><th>Day</th><th>Score</th><th>Top 3 streaks</th><th>Screen time</th><th>Unlocks</th><th>Calls</th></tr></thead>
       <tbody id="score-body"></tbody>
     </table>
   </div>
@@ -467,6 +467,8 @@
   var UNLOCK_FULL = 20;             // unlocks up to this earn full marks...
   var UNLOCK_ZERO = 50;             // ...falling to zero at this
   var MAX_PHONE_SESSION_MS = 3 * 3600000;  // an unlock with no lock inside this is treated as a missed ping
+  var MAX_CALL_MS = 2 * 3600000;           // a call start with no matching end inside this is dropped
+  var OUTGOING_CALL_GRACE_MS = 60000;      // outgoing calls: this long before call_out_start is excused too
   var TICK_MS = 60000;              // phone sessions count as activity, marked once a minute
   var LEAGUE_ROWS = 10;
   var HISTORY_ROWS = 10;
@@ -534,8 +536,15 @@
         var info = buildPhoneInfo(typed, new Date());
         var gapByDev = Object.create(null), allGap = [];
         Object.keys(byDev).forEach(function(name){
-          var withTicks = byDev[name].concat(info.ticks[name] || []);
-          withTicks.sort(function(a, b){ return a - b; });
+          // Phones: build the streak timeline from genuine interactions only
+          // (real pickups, session-closing locks, activity ticks) -- not raw
+          // pings, so an orphan lock (e.g. silencing an alarm without truly
+          // waking up) can't fake a streak break. Computers: every ping is a
+          // real keypress or click, so the raw timeline is already correct.
+          var withTicks = isPhone(name)
+            ? (info.cleanTimes[name] || []).concat(info.ticks[name] || [])
+            : byDev[name];
+          withTicks = withTicks.slice().sort(function(a, b){ return a - b; });
           gapByDev[name] = withTicks;
           allGap = allGap.concat(withTicks);
         });
@@ -564,39 +573,122 @@
   function isPhone(name){ return PHONE_LIKE.test(name); }
   function dayKey(d){ return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); }
 
-  // From each phone's typed events, works out unlock counts per day, phone
-  // screen time per day (unlock to the next lock) and a tick every
-  // minute during each session so streak maths treats phone use as activity.
+  // From each phone's typed events, works out: unlock counts and screen
+  // time per day (unlock to the next lock), a tick every minute during each
+  // session so streak maths treats phone use as activity, a "clean" list of
+  // genuine interactions for streak maths (real pickups and session-closing
+  // locks -- never an orphan lock with nothing open), and daily call stats.
+  // Calls (call_in_start/end, call_out_start/end) are cut out of all of the
+  // above entirely: an incoming or outgoing call leaves no trace in the
+  // streak timeline, so the quiet time either side of it bridges into one
+  // continuous streak, and no part of a call counts as screen time. An
+  // outgoing call still counts as one deliberate unlock; an incoming one
+  // does not, since answering isn't something you chose to pick up for.
   function buildPhoneInfo(typed, now){
-    var info = {typedStart: null, unlocks: Object.create(null), ms: Object.create(null), ticks: Object.create(null)};
+    var info = {
+      typedStart: null,
+      unlocks: Object.create(null),
+      ms: Object.create(null),
+      ticks: Object.create(null),
+      cleanTimes: Object.create(null),
+      calls: Object.create(null)  // dayKey -> {inCount, inMs, outCount, outMs}
+    };
 
-    function addSpan(start, end){
-      var cursor = new Date(start);
-      while(cursor < end){
-        var nextMidnight = startOfDay(cursor);
-        nextMidnight.setDate(nextMidnight.getDate() + 1);
-        var stop = end < nextMidnight ? end : nextMidnight;
-        var key = dayKey(cursor);
-        info.ms[key] = (info.ms[key] || 0) + (stop - cursor);
-        cursor = stop;
+    function addCallStat(day, dir, ms){
+      var row = info.calls[day] = info.calls[day] || {inCount:0, inMs:0, outCount:0, outMs:0};
+      if(dir === "in"){ row.inCount++; row.inMs += ms; }
+      else { row.outCount++; row.outMs += ms; }
+    }
+
+    function overlapsAny(t, windows){
+      for(var i=0;i<windows.length;i++){
+        if(t >= windows[i].start && t < windows[i].end) return true;
       }
+      return false;
+    }
+
+    // The portions of [start,end) not covered by any call window.
+    function subtractWindows(start, end, windows){
+      var segments = [{start:start, end:end}];
+      windows.forEach(function(w){
+        var next = [];
+        segments.forEach(function(s){
+          if(w.end <= s.start || w.start >= s.end){ next.push(s); return; }
+          if(w.start > s.start) next.push({start:s.start, end:w.start});
+          if(w.end < s.end) next.push({start:w.end, end:s.end});
+        });
+        segments = next;
+      });
+      return segments;
+    }
+
+    function addSpan(start, end, callWindows){
+      subtractWindows(start, end, callWindows).forEach(function(seg){
+        var cursor = new Date(seg.start);
+        while(cursor < seg.end){
+          var nextMidnight = startOfDay(cursor);
+          nextMidnight.setDate(nextMidnight.getDate() + 1);
+          var stop = seg.end < nextMidnight ? seg.end : nextMidnight;
+          var key = dayKey(cursor);
+          info.ms[key] = (info.ms[key] || 0) + (stop - cursor);
+          cursor = stop;
+        }
+      });
     }
 
     Object.keys(typed).forEach(function(name){
       if(!isPhone(name)) return;
+      var events = typed[name];
       var ticks = info.ticks[name] = [];
+      var clean = info.cleanTimes[name] = [];
+
+      // Pass 1: pair up call start/end events into windows. An outgoing
+      // window is extended back by the grace period so the run-up to
+      // dialling is excused too.
+      var callWindows = [];
+      var openIn = null, openOut = null;
+      events.forEach(function(e){
+        if(e.event === "call_in_start"){
+          if(!openIn) openIn = e.t;
+        } else if(e.event === "call_in_end"){
+          if(openIn && e.t - openIn <= MAX_CALL_MS){
+            callWindows.push({start:openIn, end:e.t, dir:"in"});
+            addCallStat(dayKey(openIn), "in", e.t - openIn);
+          }
+          openIn = null;
+        } else if(e.event === "call_out_start"){
+          if(!openOut) openOut = e.t;
+        } else if(e.event === "call_out_end"){
+          if(openOut && e.t - openOut <= MAX_CALL_MS){
+            callWindows.push({start:new Date(openOut.getTime() - OUTGOING_CALL_GRACE_MS), end:e.t, dir:"out"});
+            addCallStat(dayKey(openOut), "out", e.t - openOut);
+          }
+          openOut = null;
+        }
+      });
+      callWindows.sort(function(a,b){ return a.start - b.start; });
+
+      // Pass 2: unlock/lock sessions, as before, but anything that falls
+      // inside a call window (the call events themselves, and any unlock/lock
+      // the OS fires as a side effect of the call) is skipped entirely.
       var unlockedAt = null;
 
-      function closeSession(end){
-        addSpan(unlockedAt, end);
-        for(var t = unlockedAt.getTime() + TICK_MS; t < end.getTime(); t += TICK_MS) ticks.push(new Date(t));
+      function closeSession(end, real){
+        addSpan(unlockedAt, end, callWindows);
+        for(var t = unlockedAt.getTime() + TICK_MS; t < end.getTime(); t += TICK_MS){
+          var tickTime = new Date(t);
+          if(!overlapsAny(tickTime, callWindows)) ticks.push(tickTime);
+        }
+        if(real && !overlapsAny(end, callWindows)) clean.push(end);
         unlockedAt = null;
       }
 
-      typed[name].forEach(function(e){
-        if(!e.event) return;
-        if(info.typedStart === null || e.t < info.typedStart) info.typedStart = e.t;
+      events.forEach(function(e){
+        if(e.event && (info.typedStart === null || e.t < info.typedStart)) info.typedStart = e.t;
+        if(overlapsAny(e.t, callWindows)) return;
+        if(!e.event){ clean.push(e.t); return; }
         if(e.event === "unlock"){
+          clean.push(e.t);
           if(unlockedAt !== null && e.t - unlockedAt > MAX_PHONE_SESSION_MS) unlockedAt = null;
           // Only count it if it actually starts a new session -- a repeat
           // unlock ping while one is already open (seen in practice: some
@@ -608,11 +700,22 @@
             info.unlocks[key] = (info.unlocks[key] || 0) + 1;
           }
         } else if(e.event === "lock" || e.event === "screen_off"){
-          if(unlockedAt !== null && e.t - unlockedAt <= MAX_PHONE_SESSION_MS) closeSession(e.t);
+          if(unlockedAt !== null && e.t - unlockedAt <= MAX_PHONE_SESSION_MS) closeSession(e.t, true);
           else unlockedAt = null;
         }
       });
-      if(unlockedAt !== null && now - unlockedAt <= MAX_PHONE_SESSION_MS) closeSession(now);
+      if(unlockedAt !== null && now - unlockedAt <= MAX_PHONE_SESSION_MS) closeSession(now, false);
+
+      // An outgoing call is a deliberate pickup even though it leaves no
+      // unlock ping of its own in the streak timeline.
+      callWindows.forEach(function(w){
+        if(w.dir === "out"){
+          var key = dayKey(new Date(w.start.getTime() + OUTGOING_CALL_GRACE_MS));
+          info.unlocks[key] = (info.unlocks[key] || 0) + 1;
+        }
+      });
+
+      clean.sort(function(a, b){ return a - b; });
     });
     return info;
   }
@@ -1060,7 +1163,7 @@
       });
       var phoneMs = phoneInfo.ms[key] || 0;
       var top = (streaksByDay[key] || []).slice().sort(function(a, b){ return b - a; }).slice(0, 3);
-      var row = {day: day, isToday: i === 0, reason: null, top: top, computerMs: computerMs, phoneMs: phoneMs, unlocks: phoneInfo.unlocks[key] || 0};
+      var row = {day: day, isToday: i === 0, reason: null, top: top, computerMs: computerMs, phoneMs: phoneMs, unlocks: phoneInfo.unlocks[key] || 0, calls: phoneInfo.calls[key] || null};
 
       if(!combinedStart || combinedStart > day){
         row.reason = "logging started mid-day";
@@ -1110,8 +1213,9 @@
       var streakCell = el("td", "num");
       var screenCell = el("td", "num");
       var unlockCell = el("td", "num");
+      var callCell = el("td", "num");
       if(row.reason){
-        streakCell.textContent = screenCell.textContent = unlockCell.textContent = "\u2014";
+        streakCell.textContent = screenCell.textContent = unlockCell.textContent = callCell.textContent = "\u2014";
       } else {
         streakCell.textContent = row.top.length
           ? row.top.map(function(ms){ return fmtHours(ms / 3600000); }).join(" \u00b7 ") + " hrs"
@@ -1122,10 +1226,20 @@
             "computers " + fmtDuration(row.computerMs / 60000) + " \u00b7 phone " + fmtDuration(row.phoneMs / 60000)));
         }
         unlockCell.textContent = result.hasPhone ? String(row.unlocks) : "\u2014";
+        if(!result.hasPhone){
+          callCell.textContent = "\u2014";
+        } else {
+          var c = row.calls || {inCount:0, inMs:0, outCount:0, outMs:0};
+          var total = c.inCount + c.outCount;
+          callCell.textContent = total ? String(total) : "0";
+          callCell.appendChild(el("div", "cell-sub",
+            "in " + c.inCount + " (" + fmtDuration(c.inMs / 60000) + ") \u00b7 out " + c.outCount + " (" + fmtDuration(c.outMs / 60000) + ")"));
+        }
       }
       tr.appendChild(streakCell);
       tr.appendChild(screenCell);
       tr.appendChild(unlockCell);
+      tr.appendChild(callCell);
       body.appendChild(tr);
     });
   }

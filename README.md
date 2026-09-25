@@ -102,7 +102,7 @@ Every device must have been logging for the whole day, and if a phone is present
 
 ### Tuning
 
-All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_FULL_H`, `SCREEN_FULL_H`, `SCREEN_ZERO_H`, `UNLOCK_FULL`, `UNLOCK_ZERO` and `MAX_PHONE_SESSION_MS`.
+All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_FULL_H`, `SCREEN_FULL_H`, `SCREEN_ZERO_H`, `UNLOCK_FULL`, `UNLOCK_ZERO`, `MAX_PHONE_SESSION_MS`, `MAX_CALL_MS` and `OUTGOING_CALL_GRACE_MS`.
 
 ## Architecture
 
@@ -215,6 +215,17 @@ To start it at login without admin rights, put a shortcut to the script in the f
 
 The unlock and lock events are what the daily score uses for unlock counts and phone screen time (unlock to the next lock). `screen_off` is accepted as another name for `lock`, and other events such as `screen_on` are ignored.
 
+**Phone calls (optional).** If your automation app can trigger on call state, add four more automations so calls are handled separately from ordinary phone use rather than counting against you:
+
+| Trigger | URL |
+| --- | --- |
+| Incoming call starts (ringing or answered) | `<web app URL>?secret=<secret>&device=phone&event=call_in_start` |
+| Incoming call ends | `<web app URL>?secret=<secret>&device=phone&event=call_in_end` |
+| Outgoing call starts | `<web app URL>?secret=<secret>&device=phone&event=call_out_start` |
+| Outgoing call ends | `<web app URL>?secret=<secret>&device=phone&event=call_out_end` |
+
+See [Phone calls](#phone-calls) for what this changes.
+
 Exclude the automation app from battery optimisation, or Android will eventually stop it (see [dontkillmyapp.com](https://dontkillmyapp.com)).
 
 **Any other device** just needs to request `<web app URL>?secret=<secret>&device=<name>` whenever there is activity. Computers leave `event` out.
@@ -223,6 +234,17 @@ Exclude the automation app from battery optimisation, or Android will eventually
 
 1. In `index.html`, set `SHEET_ID` to your sheet's ID.
 2. Push to GitHub and enable **Settings → Pages → Deploy from a branch → main, / (root)**.
+
+## Phone calls
+
+A call (see [Loggers](#3-loggers) for the automations this needs) is cut out of the dashboard entirely rather than scored like ordinary phone use:
+
+- **It never breaks a streak.** The quiet time either side of a call bridges into one continuous streak, as if the call had not happened. An outgoing call also excuses the minute before `call_out_start`, so finding the contact and dialling does not count either. Using the phone for anything else after the call ends breaks the streak as normal.
+- **No part of a call counts towards the 30-point screen time score**, whether it happens on its own or in the middle of an otherwise ordinary unlock-to-lock session.
+- **An outgoing call always counts as one unlock**, even though answering it leaves no unlock ping of its own. **Answering an incoming call never counts as an unlock.**
+- **Daily activity** shows each day's call count and total time, split by incoming and outgoing. These are informational only and are not scored.
+
+A call start with no matching end within `MAX_CALL_MS` (2 hours) is dropped rather than treated as open-ended.
 
 ## Adding a device
 
@@ -240,6 +262,7 @@ The combined figures only count from when the **last** device started logging, b
 
 - **Missing pings look like screen-free time.** If a logger stops (the phone kills the automation app, the laptop is offline while you use it), the gap appears as a streak. This is the main way scores can be wrong.
 - **Phone logging is coarse.** It sees the phone unlocking and locking, not individual taps. Time between an unlock and the next lock counts as screen time, but an unlock with no lock within 3 hours is treated as a missed ping and ignored.
+- **An orphan lock does not break a streak.** Some automation setups fire `lock` on any screen-off, including glancing at or silencing an alarm without truly waking up. A `lock` with no unlock open at the time changes nothing -- it is not treated as an interaction at all, so it cannot end a streak or count as screen time.
 - **Timezone.** Day and night use the clock of the browser viewing the page, and the sheet's timezone should match yours.
 - **Privacy.** The sheet holds only timestamps and device names, but anyone with its link can read them, and the dashboard URL is public. Do not share either.
 - **Growth.** The dashboard downloads the whole sheet on every refresh, so it will slow down after many months of data.
