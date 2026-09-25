@@ -454,6 +454,7 @@
   // decimal clock hours (21 = 21:00, 22.5 = 22:30).
   var NIGHT_FROM_H = 21;            // a streak starting from this hour...
   var NIGHT_UNTIL_H = 5;            // ...until this hour is night; any other start is day
+  var MORNING_SPLIT_H = 7;          // a night streak still running at this hour is split here into night + day
   var MIN_STREAK_MS = 15 * 60000;   // shorter gaps are just normal use, not a "streak"
   var PING_SECONDS = 10;            // a computer ping means input in a slot this long
   var PHONE_LIKE = /phone|mobile|tablet/i;  // devices shown as pickups rather than active time
@@ -735,11 +736,16 @@
   }
 
   // Interruptions = separate bursts of activity between midnight and the end
-  // of the night, i.e. using a device when you should be asleep.
-  function countInterruptions(times, from, to){
+  // of the night, i.e. using a device when you should be asleep. Reads the
+  // gap boundaries directly (not a separately-indexed times array), so it
+  // stays correct even after the morning split below inserts extra gaps.
+  function countInterruptions(gaps, lo, hi, open){
+    var points = [];
+    for(var i=lo;i<=hi;i++) points.push(gaps[i].start);
+    if(!open) points.push(gaps[hi].end);
     var bursts = 0, prev = null;
-    for(var i=from;i<=to;i++){
-      var t = times[i];
+    for(var i=0;i<points.length;i++){
+      var t = points[i];
       if(hourOf(t) >= NIGHT_UNTIL_H) continue;
       if(prev === null || t - prev >= MIN_STREAK_MS) bursts++;
       prev = t;
@@ -747,7 +753,7 @@
     return bursts;
   }
 
-  function makePeriod(type, lo, hi, gaps, times){
+  function makePeriod(type, lo, hi, gaps){
     var longest = gaps[lo];
     for(var i=lo+1;i<=hi;i++){
       if(gaps[i].ms > longest.ms) longest = gaps[i];
@@ -766,7 +772,7 @@
       longest: longest,
       evening: evening,
       fromLoggingStart: lo === 0,
-      interruptions: type === "night" ? countInterruptions(times, lo, open ? hi : hi + 1) : 0
+      interruptions: type === "night" ? countInterruptions(gaps, lo, hi, open) : 0
     };
   }
 
@@ -791,10 +797,27 @@
     }
     if(!gaps.length) return out;
 
+    // A night streak still running once the morning wake hour arrives is cut
+    // there: the part up to that hour stays night, and a fresh day streak
+    // begins from it, even with no interaction yet. A day streak that runs
+    // through the whole night is never split this way -- only night streaks.
+    for(var gi=0; gi<gaps.length; gi++){
+      var g = gaps[gi];
+      if(!g.night) continue;
+      var cutoff = startOfDay(g.start);
+      cutoff.setHours(MORNING_SPLIT_H, 0, 0, 0);
+      if(cutoff <= g.start) cutoff.setDate(cutoff.getDate() + 1);
+      if(cutoff >= g.end) continue;
+      gaps.splice(gi, 1,
+        {start:g.start, end:cutoff, ms:cutoff-g.start, open:false, night:true},
+        {start:cutoff, end:g.end, ms:g.end-cutoff, open:g.open, night:false});
+      gi++; // the inserted second half is day -- nothing more to check on it
+    }
+
     var runStart = 0;
     for(var k=1;k<=gaps.length;k++){
       if(k < gaps.length && gaps[k].night === gaps[runStart].night) continue;
-      out.periods.push(makePeriod(gaps[runStart].night ? "night" : "day", runStart, k-1, gaps, times));
+      out.periods.push(makePeriod(gaps[runStart].night ? "night" : "day", runStart, k-1, gaps));
       runStart = k;
     }
 

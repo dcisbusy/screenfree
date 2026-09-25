@@ -30,6 +30,8 @@ So a screen-free 4pm to 10pm is a day streak even if you go to bed at 10:30pm, s
 
 A streak that starts in the daytime and runs through the whole night is a day streak, because of when it started.
 
+**The morning cut.** A night streak that is still running once 07:00 arrives is cut there: the part up to 07:00 stays a finished night streak, and a fresh day streak starts from 07:00, even with no interaction yet -- so a quiet 23:26 to 10am becomes a 7.5 hour night streak *and* a 3 hour (and counting) day streak, rather than one long night streak that swallows the morning. This only ever applies to a night streak; a day streak that runs through the whole night (the case above) is never cut this way, and a night streak that a real interaction already ends before 07:00 (a 3am check, say) needs no cut either -- the check itself already started the day streak.
+
 **Interruptions** on the night tile count separate bursts of activity between midnight and 05:00, meaning device use when you should be asleep.
 
 Streaks under 15 minutes are treated as normal use and ignored by the league table and monthly averages. Monthly averages also leave out the streak or night still in progress.
@@ -42,6 +44,7 @@ The rules are constants near the top of the script in `index.html`:
 | --- | --- | --- |
 | `NIGHT_FROM_H` | 21 | A streak starting from this hour is night... |
 | `NIGHT_UNTIL_H` | 5 | ...until this hour. Any other start is day |
+| `MORNING_SPLIT_H` | 7 | A night streak still running at this hour is cut here into a finished night streak and a fresh day streak |
 | `MIN_STREAK_MS` | 15 min | Gaps shorter than this are not counted as streaks |
 | `PING_SECONDS` | 10 | Seconds of activity that one computer ping represents (match the logger's poll interval) |
 | `PHONE_LIKE` | `/phone\|mobile\|tablet/i` | Device names matching this show pickups instead of active time |
