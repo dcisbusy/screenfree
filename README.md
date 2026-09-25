@@ -1,6 +1,6 @@
 # Screen-Free Score
 
-A small personal dashboard that scores how long you go without touching a phone or computer. It measures your longest **screen-free streak**, separately for day and night, across every device you log, and keeps a league table of your best streaks.
+A small personal dashboard that scores how long you go without touching a phone or computer. It measures your longest **screen-free streak**, separately for day and night, across every device you log, and keeps league tables of your best streaks.
 
 Live dashboard: https://dcisbusy.github.io/screenfree/
 
@@ -10,10 +10,8 @@ There is no server to run. Devices report to a Google Sheet through a tiny Apps 
 
 - **Day and Night tiles.** The longest screen-free gap in the current (or most recent) day and night, with a timeline of every interaction and a per-device breakdown alongside the all-devices figure.
 - **Daily score.** A score out of 100 for each calendar day, from your three longest waking streaks, total screen time and phone unlocks.
-- **Longest streaks.** A league table of your 10 longest streaks. Several can come from the same day.
-- **Monthly averages.** For each month: the average of your three longest day streaks, and the average of your nightly longest streak.
-- **Daily activity.** For each of the last 14 days, active time for each computer and pickups for each phone.
-- **Recent periods.** The last few day and night periods, with per-device scores.
+- **Longest streaks.** Two league tables, your top 5 night streaks and top 5 day streaks. Several can come from the same day.
+- **Monthly averages.** For each month: average score, average longest/2nd-longest/3rd-longest day streak, average longest night streak, average screen time, average unlocks and average calls.
 
 ## How a streak is measured
 
@@ -34,7 +32,7 @@ A streak that starts in the daytime and runs through the whole night is a day st
 
 **Interruptions** on the night tile count separate bursts of activity between midnight and 06:00, meaning device use when you should be asleep.
 
-Streaks under 15 minutes are treated as normal use and ignored by the league table and monthly averages. Monthly averages also leave out the streak or night still in progress.
+Streaks under 15 minutes are treated as normal use and ignored by the league tables and monthly averages. See [Monthly averages](#monthly-averages) for how those are worked out.
 
 ### Tuning
 
@@ -106,6 +104,17 @@ Every device must have been logging for the whole day, and if a phone is present
 ### Tuning
 
 All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_FULL_H`, `SCREEN_FULL_H`, `SCREEN_ZERO_H`, `UNLOCK_FULL`, `UNLOCK_ZERO`, `MAX_PHONE_SESSION_MS`, `MAX_CALL_MS` and `OUTGOING_CALL_GRACE_MS`.
+
+## Monthly averages
+
+Everything in this table is computed **per day first, then averaged across the month** -- never as a single pool of numbers drawn from the whole month at once. Concretely, it takes the same per-day figures the Daily score table shows (that day's top 3 streaks, screen time, unlocks, calls, score) for every day in the month, then averages each column down.
+
+- **Avg score.** The average of `total` over days that were actually scored (see [When a day is scored](#when-a-day-is-scored)).
+- **Avg streaks (1st · 2nd · 3rd).** Three separate averages: the average of each day's *longest* streak, the average of each day's *second-longest*, and the average of each day's *third-longest*. A day missing a rank (fewer than three streaks that day) is left out of *that rank's* average rather than counted as zero, so each of the three numbers has its own count of days behind it.
+- **Avg night streak.** The average of each finished night's longest streak. Unlike the day-streak ranks, there is only one relevant figure per night.
+- **Avg screen time, avg unlocks, avg calls.** The plain average of each day's figure, same source as the Daily score table's columns.
+
+**Left out of every column:** today (it is still accruing, so including it would understate the month) and any day where [When a day is scored](#when-a-day-is-scored) doesn't hold -- logging hadn't started, or the phone wasn't yet sending event types for the whole day.
 
 ## Architecture
 
@@ -245,7 +254,7 @@ A call (see [Loggers](#3-loggers) for the automations this needs) is cut out of 
 - **It never breaks a streak.** The quiet time either side of a call bridges into one continuous streak, as if the call had not happened. An outgoing call also excuses the minute before `call_out_start`, so finding the contact and dialling does not count either. Using the phone for anything else after the call ends breaks the streak as normal.
 - **No part of a call counts towards the 30-point screen time score**, whether it happens on its own or in the middle of an otherwise ordinary unlock-to-lock session.
 - **An outgoing call always counts as one unlock**, even though answering it leaves no unlock ping of its own. **Answering an incoming call never counts as an unlock.**
-- **Daily activity** shows each day's call count and total time, split by incoming and outgoing. These are informational only and are not scored.
+- **The daily score table** shows each day's call count and total time, split by incoming and outgoing. These are informational only and are not scored.
 
 A call start with no matching end within `MAX_CALL_MS` (2 hours) is dropped rather than treated as open-ended.
 
@@ -253,13 +262,9 @@ A call start with no matching end within `MAX_CALL_MS` (2 hours) is dropped rath
 
 Give the new logger a new `DeviceName` (for example `work_laptop`). It appears on the dashboard automatically as "Work laptop". No changes to the sheet, the Apps Script or the dashboard are needed.
 
-The combined figures only count from when the **last** device started logging, because before that you cannot know whether it was in use. Adding a device therefore restarts the combined streaks, league table and monthly averages from that point.
+The combined figures only count from when the **last** device started logging, because before that you cannot know whether it was in use. Adding a device therefore restarts the combined streaks, league tables and monthly averages from that point.
 
-## Daily activity numbers
-
-- **Computers: active time** = pings x `PING_SECONDS`. A ping means there was keyboard or mouse input in that 10-second slot, so it measures time spent actively typing or clicking. Reading or watching without touching anything is not counted.
-- **Phones: pickups** are estimated as half the pings, because each pickup sends one ping on unlock and one on lock. Once the phone sends event types, the daily score table shows exact unlock counts instead.
-- A device counts as a phone if its name matches `PHONE_LIKE`; anything else is treated as a computer.
+A device counts as a phone (screen time from unlock to lock, unlocks, calls) if its name matches `PHONE_LIKE`; anything else is treated as a computer (screen time from pings x `PING_SECONDS`).
 
 ## Limitations
 
