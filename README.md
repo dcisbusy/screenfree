@@ -9,7 +9,7 @@ There is no server to run. Devices report to a Google Sheet through a tiny Apps 
 ## What it shows
 
 - **Day and Night tiles.** The longest screen-free gap in the current (or most recent) day and night, with a timeline of every interaction and a per-device breakdown alongside the all-devices figure.
-- **Daily score.** A score out of 100 for each calendar day, from your three longest waking streaks, total screen time and phone unlocks.
+- **Daily score.** A score out of 100 for each calendar day, from your three longest waking streaks, total screen time, phone unlocks and whether 22:00-07:00 was screen-free.
 - **Longest streaks.** Two league tables, your top 5 night streaks and top 5 day streaks. Several can come from the same day.
 - **Monthly averages.** For each month: average score, average longest/2nd-longest/3rd-longest day streak, average longest night streak, average screen time, average unlocks and average calls.
 
@@ -52,25 +52,23 @@ Hours are decimal clock hours, so `21` is 21:00 and `22.5` is 22:30.
 
 ## Daily score
 
-Each calendar day (00:00 to 23:59) gets a score out of 100: streak points + screen points + unlock points, each rounded to a whole number before adding, so the breakdown shown always sums to the total.
+Each calendar day (00:00 to 23:59) gets a score out of 100: streak points + screen points + unlock points + night points, each rounded to a whole number before adding, so the breakdown shown always sums to the total.
 
-### 1. Streak points (0–50)
+### 1. Streak points (0–35)
 
-Take the day's three longest **waking streaks** — a streak counts as waking if it starts anywhere from 06:00 up to (but not including) 22:00; one starting from 22:00 up to 06:00 is a night streak and is excluded entirely (see [Splitting day from night](#splitting-day-from-night)). Each streak is clipped so it doesn't run past midnight into the next day. A missing streak (fewer than three that day) counts as 0 hours.
+Take the day's three longest **waking streaks** — a streak counts as waking if it starts anywhere from 06:00 up to (but not including) 22:00; one starting from 22:00 up to 06:00 is a night streak and is excluded entirely (see [Splitting day from night](#splitting-day-from-night)). Each streak is clipped so it doesn't run past midnight into the next day. A streak that starts in the 06:00-07:00 grace window is credited from 07:00 instead of its real start — otherwise checking your phone at 6:30 would score better than staying quiet until the automatic 07:00 cutover, since the streak would be measured from an earlier point. This clipping only affects the score; the streak still displays at its true length everywhere else (tiles, league tables, monthly streak averages).
 
-For each of the three:
-
-```
-share = min(hours / STREAK_FULL_H, 1)        // STREAK_FULL_H = 3
-```
+The three streaks are **summed uncapped**, not capped individually and then averaged:
 
 ```
-streak points = SCORE_STREAK_POINTS × (share₁ + share₂ + share₃) / 3      // SCORE_STREAK_POINTS = 50
+top3 hours = streak1 + streak2 + streak3        // a missing streak counts as 0
+share = min(top3 hours / STREAK_SUM_FULL_H, 1)  // STREAK_SUM_FULL_H = 12
+streak points = round(SCORE_STREAK_POINTS × share)   // SCORE_STREAK_POINTS = 35
 ```
 
-Three streaks of 3+ hours each maxes this out at 50.
+This matters: capping each streak at some length before averaging would mean an 8-hour streak followed by a 2-hour and a 30-minute one scores *worse* than three tidy 3-hour streaks, even though it adds up to more total screen-free time (10.5h vs 9h). Summing uncapped fixes that — both days above reach the same total against the 12-hour bar. A single uninterrupted streak of 12+ hours, with nothing else that day, reaches full marks on its own.
 
-### 2. Screen time points (0–30)
+### 2. Screen time points (0–35)
 
 Screen time = computer active time + phone active time, for the **whole calendar day** (00:00–23:59, not just waking hours — a 2am scroll still costs you here even though it's excluded from streak points):
 
@@ -84,7 +82,7 @@ points = SCORE_SCREEN_POINTS × (SCREEN_ZERO_H − hours) / (SCREEN_ZERO_H − S
 points = 0                                                                          if hours ≥ SCREEN_ZERO_H
 ```
 
-Currently `SCORE_SCREEN_POINTS = 30`, `SCREEN_FULL_H = 1`, `SCREEN_ZERO_H = 5`: full marks at 1 hour or less, zero at 5 hours or more.
+Currently `SCORE_SCREEN_POINTS = 35`, `SCREEN_FULL_H = 1`, `SCREEN_ZERO_H = 5`: full marks at 1 hour or less, zero at 5 hours or more.
 
 ### 3. Unlock points (0–20)
 
@@ -98,41 +96,52 @@ points = 0                                                                      
 
 Currently `SCORE_UNLOCK_POINTS = 20`, `UNLOCK_FULL = 20`, `UNLOCK_ZERO = 50`: full marks at 20 unlocks or fewer, zero at 50 or more. If there is no phone at all, this defaults to full marks.
 
+### 4. Night points (0–10)
+
+Screen time and unlocks are whole-day totals, so on their own a quiet night is only ever a side effect of daytime use having left room in that budget — which meant a genuinely clean night earned nothing extra, and a bit of night activity often cost nothing at all if the day's totals had slack. Night points score 22:00–07:00 directly and separately from the rest of the day, so it can't be a free ride either way:
+
+```
+touches = number of separate interactions (any device) between 22:00 and 07:00
+points = round(SCORE_NIGHT_POINTS × (NIGHT_TOUCHES_ZERO − touches) / NIGHT_TOUCHES_ZERO)   clamped to [0, SCORE_NIGHT_POINTS]
+```
+
+Currently `SCORE_NIGHT_POINTS = 10`, `NIGHT_TOUCHES_ZERO = 5`: zero touches earns full marks, 5 or more earns zero, scaling in between (so one unavoidable interruption — a real phone call, checking on a child — costs 2 points, not all 10). A phone call is never a night touch (see [Phone calls](#phone-calls)); an orphan `lock` with nothing open isn't an interaction at all (see [Limitations](#limitations)) and so isn't one either.
+
 ### When a day is scored
 
-Every device must have been logging for the whole day, and if a phone is present it must have been sending `unlock`/`lock` event types for the whole day. Otherwise the row shows a dash with the reason instead of a score. Today's row shows a score "so far" that changes as the day goes on.
+Every device must have been logging for the whole day *and* the whole of the preceding night (22:00 the evening before), and if a phone is present it must have been sending `unlock`/`lock` event types for the whole day. Otherwise the row shows a dash with the reason instead of a score. Today's row shows a score "so far" that changes as the day goes on.
 
 ### Tuning
 
-All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_FULL_H`, `SCREEN_FULL_H`, `SCREEN_ZERO_H`, `UNLOCK_FULL`, `UNLOCK_ZERO`, `MAX_PHONE_SESSION_MS`, `MAX_CALL_MS` and `OUTGOING_CALL_GRACE_MS`.
+All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `SCORE_NIGHT_POINTS`, `STREAK_SUM_FULL_H`, `SCREEN_FULL_H`, `SCREEN_ZERO_H`, `UNLOCK_FULL`, `UNLOCK_ZERO`, `NIGHT_TOUCHES_ZERO`, `MAX_PHONE_SESSION_MS`, `MAX_CALL_MS` and `OUTGOING_CALL_GRACE_MS`.
 
 ### Example scores
 
-Ten made-up days, each checked against the actual formula above rather than estimated, showing how different mixes of streaks, screen time and unlocks land on the same score:
+Ten made-up days, each checked against the actual formula above rather than estimated, showing how very different mixes of streaks, screen time, unlocks and night activity land on the same score:
 
-| Score | Top 3 streaks | Screen time | Unlocks | What that day looked like |
-| ---: | --- | --- | --- | --- |
-| **100** | 4.0 &middot; 3.5 &middot; 3.0 hrs | 40 min | &mdash; | Laptop only, no phone all day. Three long stretches away from any screen, ~40 min of typing spread across the rest of the day. |
-| **90** | 5.0 &middot; 4.0 &middot; 3.0 hrs | 45 min | 35 | Three excellent streaks and light screen time, but the phone was picked up 35 times &mdash; each check brief, so time stayed low, but the frequency alone costs unlock points. Also took 3 calls that day; calls never affect the score either way. |
-| **80** | 3.0 &middot; 3.0 &middot; 3.0 hrs | 2h 20m | 35 | Three solid 3-hour streaks, but screen time crept up to 2h20m across laptop and phone combined, plus 35 unlocks. |
-| **70** | 3.0 &middot; 3.0 &middot; 1.2 hrs | 40 min | 55 | Two full 3-hour streaks and a shorter one, screen time kept low (40 min) &mdash; but 55 phone pickups, each one very brief, is well past where frequency alone costs you. |
-| **60** | 3.0 &middot; 2.4 hrs | 2h 20m | 35 | Only two real streaks all day (no third), screen time 2h20m, 35 unlocks. |
-| **50** | 3.0 &middot; 0.6 hrs | 40 min | 55 | One solid 3-hour streak, a much shorter one after it, screen time kept low overall &mdash; but 55 pickups through the day. |
-| **40** | 1.8 hrs | 40 min | 55 | Only one streak worth mentioning, under 2 hours &mdash; a fragmented day. Screen time still low despite 55 brief pickups. |
-| **30** | 1.8 hrs | 2h 20m | 55 | Same one fragmented streak, but screen time is now 2h20m on top of the 55 pickups. |
-| **20** | 1.8 hrs | 3h 40m | 55 | Same fragmented streak, screen time up to 3h40m, still 55 pickups. |
-| **10** | &mdash; | 3h 40m | 55 | No break longer than about 5 minutes all day, 3h40m total screen time, 55 pickups &mdash; a heavy day on every count. |
+| Score | Top 3 streaks | Screen time | Unlocks | Night (22:00-07:00) | What that day looked like |
+| ---: | --- | --- | --- | --- | --- |
+| **100** | 5.0 · 4.0 · 3.0 hrs | 8 min | — | clean | Laptop only, no phone all day. Three strong streaks (12h total), negligible screen time, and nothing touched all night. |
+| **90** | 4.0 · 3.0 · 1.5 hrs | 8 min | 10 | clean | Same excellent shape, but the three streaks only add up to 8.5h against the 12h bar — everything else is perfect. |
+| **80** | 5.0 hrs | 8 min | 10 | clean | One solid 5-hour streak and nothing else worth mentioning that day. Screen time, unlocks and the night are all still excellent. |
+| **70** | 2.0 hrs | 1h 10m | 15 | clean | Only a single 2-hour streak, screen time creeping up, but unlocks comfortably under the cap and a clean night. |
+| **60** | — | 0 min | 25 | 1 touch | No streak worth mentioning — frequent brief phone pickups all day prevented one, though each was so short total screen time stayed near zero. 25 unlocks is just past the point of costing points, plus one interruption overnight. |
+| **50** | — | 0 min | 40 | 1 touch | Same pattern, but pickups up to 40 through the day. |
+| **40** | — | 0 min | 45 | 4 touches | Same again, 45 pickups, and a night disturbed four separate times. |
+| **30** | — | 1h 50m | 55 | 4 touches | Pickups are lasting longer now (screen time up to 1h50m), 55 of them, still a disturbed night. |
+| **20** | — | 2h 40m | 55 | 5+ touches | Screen time up to 2h40m, 55 pickups, and the night is now fully disturbed — zero night points. |
+| **10** | — | 3h 50m | 55+ | 5+ touches | No break longer than a few minutes all day, screen time nearly 4 hours, heavy pickups, disturbed night — a heavy day on every count. |
 
-An unlocks column showing &mdash; means there is no phone logging that day, so unlocks default to full marks. A streaks column showing &mdash; means the longest streak that day was only a few minutes.
+An unlocks column showing — means there is no phone logging that day, so unlocks default to full marks. A streaks column showing — means the longest streak that day was only a few minutes.
 
 ## Monthly averages
 
-Everything in this table is computed **per day first, then averaged across the month** -- never as a single pool of numbers drawn from the whole month at once. Concretely, it takes the same per-day figures the Daily score table shows (that day's top 3 streaks, screen time, unlocks, calls, score) for every day in the month, then averages each column down.
+Everything in this table is computed **per day first, then averaged across the month** -- never as a single pool of numbers drawn from the whole month at once. Concretely, it takes the same per-day figures the Daily score table shows (that day's top 3 streaks, screen time, unlocks, calls, night touches, score) for every day in the month, then averages each column down.
 
 - **Avg score.** The average of `total` over days that were actually scored (see [When a day is scored](#when-a-day-is-scored)).
-- **Avg streaks (1st · 2nd · 3rd).** Three separate averages: the average of each day's *longest* streak, the average of each day's *second-longest*, and the average of each day's *third-longest*. A day missing a rank (fewer than three streaks that day) is left out of *that rank's* average rather than counted as zero, so each of the three numbers has its own count of days behind it.
-- **Avg night streak.** The average of each finished night's longest streak. Unlike the day-streak ranks, there is only one relevant figure per night.
-- **Avg screen time, avg unlocks, avg calls.** The plain average of each day's figure, same source as the Daily score table's columns.
+- **Avg streaks (1st · 2nd · 3rd).** Three separate averages: the average of each day's *longest* streak, the average of each day's *second-longest*, and the average of each day's *third-longest*. A day missing a rank (fewer than three streaks that day) is left out of *that rank's* average rather than counted as zero, so each of the three numbers has its own count of days behind it. This display average is unrelated to how streak points are scored (see [Streak points](#1-streak-points-035)), which sums the three uncapped rather than ranking them separately.
+- **Avg night streak.** The average of each finished night's longest streak. Unlike the day-streak ranks, there is only one relevant figure per night. This is a different thing from **avg night touches** below -- one measures the longest unbroken stretch of the night, the other counts interruptions in the 22:00-07:00 scoring window specifically.
+- **Avg screen time, avg unlocks, avg calls, avg night touches.** The plain average of each day's figure, same source as the Daily score table's columns.
 
 **Left out of every column:** today (it is still accruing, so including it would understate the month) and any day where [When a day is scored](#when-a-day-is-scored) doesn't hold -- logging hadn't started, or the phone wasn't yet sending event types for the whole day.
 
