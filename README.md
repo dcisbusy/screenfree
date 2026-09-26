@@ -106,6 +106,25 @@ Every device must have been logging for the whole day, and if a phone is present
 
 All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_FULL_H`, `SCREEN_FULL_H`, `SCREEN_ZERO_H`, `UNLOCK_FULL`, `UNLOCK_ZERO`, `MAX_PHONE_SESSION_MS`, `MAX_CALL_MS` and `OUTGOING_CALL_GRACE_MS`.
 
+### Example scores
+
+Ten made-up days, each checked against the actual formula above rather than estimated, showing how different mixes of streaks, screen time and unlocks land on the same score:
+
+| Score | Top 3 streaks | Screen time | Unlocks | What that day looked like |
+| ---: | --- | --- | --- | --- |
+| **100** | 4.0 &middot; 3.5 &middot; 3.0 hrs | 40 min | &mdash; | Laptop only, no phone all day. Three long stretches away from any screen, ~40 min of typing spread across the rest of the day. |
+| **90** | 5.0 &middot; 4.0 &middot; 3.0 hrs | 45 min | 35 | Three excellent streaks and light screen time, but the phone was picked up 35 times &mdash; each check brief, so time stayed low, but the frequency alone costs unlock points. Also took 3 calls that day; calls never affect the score either way. |
+| **80** | 3.0 &middot; 3.0 &middot; 3.0 hrs | 2h 20m | 35 | Three solid 3-hour streaks, but screen time crept up to 2h20m across laptop and phone combined, plus 35 unlocks. |
+| **70** | 3.0 &middot; 3.0 &middot; 1.2 hrs | 40 min | 55 | Two full 3-hour streaks and a shorter one, screen time kept low (40 min) &mdash; but 55 phone pickups, each one very brief, is well past where frequency alone costs you. |
+| **60** | 3.0 &middot; 2.4 hrs | 2h 20m | 35 | Only two real streaks all day (no third), screen time 2h20m, 35 unlocks. |
+| **50** | 3.0 &middot; 0.6 hrs | 40 min | 55 | One solid 3-hour streak, a much shorter one after it, screen time kept low overall &mdash; but 55 pickups through the day. |
+| **40** | 1.8 hrs | 40 min | 55 | Only one streak worth mentioning, under 2 hours &mdash; a fragmented day. Screen time still low despite 55 brief pickups. |
+| **30** | 1.8 hrs | 2h 20m | 55 | Same one fragmented streak, but screen time is now 2h20m on top of the 55 pickups. |
+| **20** | 1.8 hrs | 3h 40m | 55 | Same fragmented streak, screen time up to 3h40m, still 55 pickups. |
+| **10** | &mdash; | 3h 40m | 55 | No break longer than about 5 minutes all day, 3h40m total screen time, 55 pickups &mdash; a heavy day on every count. |
+
+An unlocks column showing &mdash; means there is no phone logging that day, so unlocks default to full marks. A streaks column showing &mdash; means the longest streak that day was only a few minutes.
+
 ## Monthly averages
 
 Everything in this table is computed **per day first, then averaged across the month** -- never as a single pool of numbers drawn from the whole month at once. Concretely, it takes the same per-day figures the Daily score table shows (that day's top 3 streaks, screen time, unlocks, calls, score) for every day in the month, then averages each column down.
