@@ -21,10 +21,10 @@ Every interaction on any device is logged as a timestamp. A streak is the time b
 
 Each streak is labelled by the time of the check that **starts** it:
 
-- A streak that starts from **21:00 until 06:00** is **night**.
-- A streak that starts from **06:00 until 21:00** is **day**.
+- A streak that starts from **22:00 until 06:00** is **night**.
+- A streak that starts from **06:00 until 22:00** is **day**.
 
-So a screen-free 4pm to 10pm is a day streak even if you go to bed at 10:30pm, sleep that begins with a 22:56 check is a night streak, a phone check at 3am starts another night streak (breaking the previous one, but staying night rather than ending it), a 5:45am check does the same, and a check at 6:15am starts a day streak instead. Streaks are never cut at the boundary just because they cross it: a streak that starts at 20:50 and ends (via a real check) at 21:40 is one day streak, even though it ran past 21:00.
+So a screen-free 4pm to 10pm is a day streak even if you go to bed at 10:30pm, sleep that begins with a 22:56 check is a night streak, a phone check at 3am starts another night streak (breaking the previous one, but staying night rather than ending it), a 5:45am check does the same, and a check at 6:15am starts a day streak instead. Streaks are never cut at the boundary just because they cross it: a streak that starts at 18:50 and ends (via a real check) at 21:40 is one day streak, even though it ran late into the evening.
 
 A streak that starts in the daytime is always a day streak by the rule above, however long it goes on to run for -- which is exactly what the next two cuts exist to handle.
 
@@ -40,7 +40,7 @@ The rules are constants near the top of the script in `index.html`:
 
 | Constant | Default | Meaning |
 | --- | --- | --- |
-| `NIGHT_FROM_H` | 21 | A streak starting from this hour is night... |
+| `NIGHT_FROM_H` | 22 | A streak starting from this hour is night... |
 | `NIGHT_UNTIL_H` | 6 | ...until this hour. Any other start is day |
 | `EVENING_SPLIT_H` | 22 | A day streak still running at this hour is cut here into a finished day streak and a fresh night streak |
 | `MORNING_SPLIT_H` | 7 | A night streak still running at this hour is cut here into a finished night streak and a fresh day streak |
@@ -56,7 +56,7 @@ Each calendar day (00:00 to 23:59) gets a score out of 100: streak points + scre
 
 ### 1. Streak points (0–50)
 
-Take the day's three longest **waking streaks** — a streak counts as waking if it starts anywhere from 06:00 up to (but not including) 21:00; one starting from 21:00 up to 06:00 is a night streak and is excluded entirely (see [Splitting day from night](#splitting-day-from-night)). Each streak is clipped so it doesn't run past midnight into the next day. A missing streak (fewer than three that day) counts as 0 hours.
+Take the day's three longest **waking streaks** — a streak counts as waking if it starts anywhere from 06:00 up to (but not including) 22:00; one starting from 22:00 up to 06:00 is a night streak and is excluded entirely (see [Splitting day from night](#splitting-day-from-night)). Each streak is clipped so it doesn't run past midnight into the next day. A missing streak (fewer than three that day) counts as 0 hours.
 
 For each of the three:
 
