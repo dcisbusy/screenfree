@@ -440,7 +440,7 @@
 </section>
 
 <footer>
-  <p><strong>How day and night are split.</strong> A streak is the time between two interactions, on any device, and is never cut at a clock boundary. It counts as day or night according to the check that <em>starts</em> it: a streak that starts from 21:00 until 06:00 is night, and one that starts from 06:00 until 21:00 is day. So a screen-free 4&ndash;10pm is a day streak, sleep that begins with a 22:56 check is a night streak, a 3am check starts another night streak (breaking it, but staying night), and a check at 6:15am starts a day streak instead. A night streak still running once 07:00 arrives is cut there regardless, so a quiet night that runs past 7am always shows as a finished night streak plus a fresh day streak. Night interruptions are separate bursts of activity between midnight and 06:00. Streaks under 15 minutes are ignored in the tables above.</p>
+  <p><strong>How day and night are split.</strong> A streak is the time between two interactions, on any device, and is never cut at a clock boundary <em>unless it&rsquo;s still going</em> at 22:00 or 07:00. It counts as day or night according to the check that <em>starts</em> it: a streak that starts from 21:00 until 06:00 is night, and one that starts from 06:00 until 21:00 is day. So a screen-free 4&ndash;10pm is a day streak, sleep that begins with a 22:56 check is a night streak, a 3am check starts another night streak (breaking it, but staying night), and a check at 6:15am starts a day streak instead. But a streak with no interaction at all is force-cut at 22:00 (day&rarr;night) and again at 07:00 (night&rarr;day), as many times as it keeps going &mdash; so a quiet 8:18pm to 10am becomes a short evening day streak, a full night streak, and a fresh morning day streak, rather than one streak that swallows the whole stretch or gets credited to the wrong day. A streak that already ends at or before a cut, via a real interaction, is never touched by it. Night interruptions are separate bursts of activity between midnight and 06:00. Streaks under 15 minutes are ignored in the tables above.</p>
   <p><strong>Daily score.</strong> Out of 100. Up to 50 points for your three longest waking streaks (each earns full marks at 3 hours; night streaks don&rsquo;t count, so sleep doesn&rsquo;t inflate the score), up to 30 for total screen time (full marks at 1 hour or less, zero at 5 hours), and up to 20 for phone unlocks (full marks at 20 or fewer, zero at 50). Screen time is computer active time plus phone time from unlock to lock. A phone call never breaks a streak and never counts as screen time; only an outgoing call counts as an unlock. A day is only scored once every device was logging all day and the phone is sending event types.</p>
   <p>&ldquo;Combined&rdquo; only counts a gap when <em>every</em> device was quiet, from when the last device began logging. Per-device figures are measured within the same day or night period; * = that device started logging partway through it. Monthly averages are worked out per day first &mdash; that day&rsquo;s longest, second-longest and third-longest streak &mdash; and then averaged across the month, leaving out today and any day not fully and validly logged.</p>
   <p>Reads directly from your Google Sheet event log. Refreshes automatically every 2 minutes &middot;
@@ -462,6 +462,7 @@
   // decimal clock hours (21 = 21:00, 22.5 = 22:30).
   var NIGHT_FROM_H = 21;            // a streak starting from this hour...
   var NIGHT_UNTIL_H = 6;            // ...until this hour is night; any other start is day
+  var EVENING_SPLIT_H = 22;         // a day streak still running at this hour is split here into day + night
   var MORNING_SPLIT_H = 7;          // a night streak still running at this hour is split here into night + day
   var MIN_STREAK_MS = 15 * 60000;   // shorter gaps are just normal use, not a "streak"
   var PING_SECONDS = 10;            // a computer ping means input in a slot this long
@@ -804,21 +805,29 @@
     }
     if(!gaps.length) return out;
 
-    // A night streak still running once the morning wake hour arrives is cut
-    // there: the part up to that hour stays night, and a fresh day streak
-    // begins from it, even with no interaction yet. A day streak that runs
-    // through the whole night is never split this way -- only night streaks.
-    for(var gi=0; gi<gaps.length; gi++){
-      var g = gaps[gi];
-      if(!g.night) continue;
-      var cutoff = startOfDay(g.start);
-      cutoff.setHours(MORNING_SPLIT_H, 0, 0, 0);
-      if(cutoff <= g.start) cutoff.setDate(cutoff.getDate() + 1);
-      if(cutoff >= g.end) continue;
-      gaps.splice(gi, 1,
-        {start:g.start, end:cutoff, ms:cutoff-g.start, open:false, night:true},
-        {start:cutoff, end:g.end, ms:g.end-cutoff, open:g.open, night:false});
-      gi++; // the inserted second half is day -- nothing more to check on it
+    // A streak still running once the evening cut (22:00) or morning cut
+    // (07:00) arrives is split there: the part before stays whatever it was,
+    // the part from the cut onward flips to the other type. This repeats
+    // forward through as many of these boundaries as the streak actually
+    // spans, so an exceptionally long streak still gets separate credit for
+    // each day and night it crosses, not just the first one. A streak that
+    // is cut exactly at, or already ends before, its next boundary is left
+    // alone -- this is why a 4pm-10pm streak that ends right at 22:00 stays
+    // whole, and a night streak already ended before 07:00 is untouched.
+    for(var si=0; si<gaps.length; si++){
+      var sg = gaps[si];
+      var cutoffH = sg.night ? MORNING_SPLIT_H : EVENING_SPLIT_H;
+      var cutoff = startOfDay(sg.start);
+      cutoff.setHours(cutoffH, 0, 0, 0);
+      if(cutoff <= sg.start) cutoff.setDate(cutoff.getDate() + 1);
+      if(cutoff >= sg.end) continue;
+      gaps.splice(si, 1,
+        {start:sg.start, end:cutoff, ms:cutoff-sg.start, open:false, night:sg.night},
+        {start:cutoff, end:sg.end, ms:sg.end-cutoff, open:sg.open, night:!sg.night});
+      // The head piece (gaps[si]) is capped exactly at its own cutoff, so it
+      // never needs rechecking. Leave si alone -- the loop's own si++ moves
+      // on to examine the tail (now at gaps[si+1]) next, which may itself
+      // need splitting again if the streak keeps going.
     }
 
     var runStart = 0;

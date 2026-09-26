@@ -24,11 +24,11 @@ Each streak is labelled by the time of the check that **starts** it:
 - A streak that starts from **21:00 until 06:00** is **night**.
 - A streak that starts from **06:00 until 21:00** is **day**.
 
-So a screen-free 4pm to 10pm is a day streak even if you go to bed at 10:30pm, sleep that begins with a 22:56 check is a night streak, a phone check at 3am starts another night streak (breaking the previous one, but staying night rather than ending it), a 5:45am check does the same, and a check at 6:15am starts a day streak instead. Streaks are never cut at the boundary: a streak that starts at 20:50 and ends at 22:40 is one day streak.
+So a screen-free 4pm to 10pm is a day streak even if you go to bed at 10:30pm, sleep that begins with a 22:56 check is a night streak, a phone check at 3am starts another night streak (breaking the previous one, but staying night rather than ending it), a 5:45am check does the same, and a check at 6:15am starts a day streak instead. Streaks are never cut at the boundary just because they cross it: a streak that starts at 20:50 and ends (via a real check) at 21:40 is one day streak, even though it ran past 21:00.
 
-A streak that starts in the daytime and runs through the whole night is a day streak, because of when it started.
+A streak that starts in the daytime is always a day streak by the rule above, however long it goes on to run for -- which is exactly what the next two cuts exist to handle.
 
-**The morning cut.** A night streak that is still running once 07:00 arrives is cut there regardless: the part up to 07:00 stays a finished night streak, and a fresh day streak starts from 07:00 with no interaction needed to begin it -- so a quiet 23:26 to 10am becomes a 7.5 hour night streak *and* a 3 hour (and counting) day streak, rather than one long night streak that swallows the morning. This only ever applies to a night streak that is still going; one already ended by a real check (the 6:15am case above) needs no cut, and a day streak that runs through the whole night (the case above) is never cut this way at all.
+**The evening and morning cuts.** A streak that is still running -- no interaction at all -- when 22:00 or 07:00 arrives is cut there: day flips to night at 22:00, and night flips back to day at 07:00, and this repeats forward through as many of these as the streak actually spans. So a quiet 20:18 to 10am becomes a short evening day streak (20:18-22:00), a full night streak (22:00-07:00) and a fresh morning day streak (07:00-10am), each credited to the right day, rather than one streak that swallows the whole stretch or a day streak spanning the whole night with no night credit at all. An exceptionally long streak -- days, not hours -- keeps splitting at every 22:00 and 07:00 it crosses, so it never stops accruing separate night and day credit. A streak already ended by a real check before its next cut needs no cut at all: the 21:40 case above, or the earlier 6:15am case, are both left exactly as they are.
 
 **Interruptions** on the night tile count separate bursts of activity between midnight and 06:00, meaning device use when you should be asleep.
 
@@ -42,6 +42,7 @@ The rules are constants near the top of the script in `index.html`:
 | --- | --- | --- |
 | `NIGHT_FROM_H` | 21 | A streak starting from this hour is night... |
 | `NIGHT_UNTIL_H` | 6 | ...until this hour. Any other start is day |
+| `EVENING_SPLIT_H` | 22 | A day streak still running at this hour is cut here into a finished day streak and a fresh night streak |
 | `MORNING_SPLIT_H` | 7 | A night streak still running at this hour is cut here into a finished night streak and a fresh day streak |
 | `MIN_STREAK_MS` | 15 min | Gaps shorter than this are not counted as streaks |
 | `PING_SECONDS` | 10 | Seconds of activity that one computer ping represents (match the logger's poll interval) |
