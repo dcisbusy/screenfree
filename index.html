@@ -470,6 +470,7 @@
   var DAILY_ROWS = 14;
   var SCORE_STREAK_POINTS = 30;     // daily score, out of 100 (30 + 50 + 20)
   var SCORE_SCREEN_POINTS = 50;
+  var SCREEN_ZERO_MIN = 500;        // active minutes that day at which screen points reach zero (linear from 0)
   var SCORE_UNLOCK_POINTS = 20;
   var STREAK_SUM_FULL_H = 12;       // your top 3 streaks, summed uncapped, earn full marks at this total
   var UNLOCK_FULL = 20;             // unlocks up to this earn full marks...
@@ -1258,9 +1259,13 @@
         // streaks, despite adding up to more screen-free time overall.
         var topSumH = ((top[0] || 0) + (top[1] || 0) + (top[2] || 0)) / 3600000;
         var streakShare = Math.min(topSumH / STREAK_SUM_FULL_H, 1);
+        // 1 point lost for every 10 minutes of active time (union across all
+        // devices), zero from SCREEN_ZERO_MIN minutes onward -- not the same
+        // curve as the displayed screen-free percentage, which stays a plain
+        // share of the 24-hour day.
         row.pts = {
           streak: Math.round(SCORE_STREAK_POINTS * streakShare),
-          screen: Math.round(SCORE_SCREEN_POINTS * screenFreeFraction),
+          screen: Math.round(SCORE_SCREEN_POINTS * fall(activeMs / 60000, 0, SCREEN_ZERO_MIN)),
           unlock: Math.round(hasPhone ? SCORE_UNLOCK_POINTS * fall(row.unlocks, UNLOCK_FULL, UNLOCK_ZERO) : SCORE_UNLOCK_POINTS)
         };
         row.total = row.pts.streak + row.pts.screen + row.pts.unlock;

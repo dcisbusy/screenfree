@@ -68,20 +68,24 @@ streak points = round(SCORE_STREAK_POINTS × share)   // SCORE_STREAK_POINTS = 3
 
 This matters: capping each streak at some length before averaging would mean an 8-hour streak followed by a 2-hour and a 30-minute one scores *worse* than three tidy 3-hour streaks, even though it adds up to more total screen-free time (10.5h vs 9h). Summing uncapped fixes that — both days above reach the same total against the 12-hour bar. A single uninterrupted streak of 12+ hours, with nothing else that day, reaches full marks on its own.
 
-### 2. Screen-free percentage points (0–50)
+### 2. Screen points (0–50)
 
-This is a raw percentage: the share of the whole calendar day (00:00–23:59) with **no device active at all**. There is no grace period or curve — only a perfectly screen-free day reaches full marks:
+Based on total active time that day (00:00–23:59), across every device merged into one:
 
 ```
 active = union of every computer ping's PING_SECONDS window and every phone unlock-to-lock
          session that day, merged across ALL devices so overlapping moments aren't
          double-counted (using both a laptop and a phone in the same minute still only
          costs that one minute, not two)
-screen-free share = 1 − (active time that day / 24 hours)
-screen points = round(SCORE_SCREEN_POINTS × screen-free share)   // SCORE_SCREEN_POINTS = 50
+active minutes = active time that day, in minutes
+points = SCORE_SCREEN_POINTS                                               if active minutes ≤ 0
+points = SCORE_SCREEN_POINTS × (SCREEN_ZERO_MIN − active minutes) / SCREEN_ZERO_MIN   if 0 < active minutes < SCREEN_ZERO_MIN
+points = 0                                                                  if active minutes ≥ SCREEN_ZERO_MIN
 ```
 
-Merging across devices before measuring is what makes this a genuine percentage of the day rather than a sum of each device's own total, which could otherwise overstate how much time was actually spent on a screen. A phone call is excluded from "active" entirely, just as it is from streaks and unlocks (see [Phone calls](#phone-calls)).
+Currently `SCORE_SCREEN_POINTS = 50`, `SCREEN_ZERO_MIN = 500`: 1 point lost for every 10 minutes of active time, reaching zero at 500 minutes (8h 20m). There is no grace period — any active time at all costs something. Merging across devices before measuring is what keeps a moment using two devices at once from being counted twice. A phone call is excluded from "active" entirely, just as it is from streaks and unlocks (see [Phone calls](#phone-calls)).
+
+The dashboard separately shows a **screen-free percentage** (active time as a share of the full 24-hour day) on the Daily score and Monthly averages tables. That figure is informational and uses a different, gentler scale from the one above — the two numbers will not simply multiply into each other.
 
 ### 3. Unlock points (0–20)
 
@@ -101,24 +105,24 @@ Every device must have been logging for the whole day, and if a phone is present
 
 ### Tuning
 
-All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_SUM_FULL_H`, `UNLOCK_FULL`, `UNLOCK_ZERO`, `MAX_PHONE_SESSION_MS`, `MAX_CALL_MS` and `OUTGOING_CALL_GRACE_MS`.
+All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_SUM_FULL_H`, `SCREEN_ZERO_MIN`, `UNLOCK_FULL`, `UNLOCK_ZERO`, `MAX_PHONE_SESSION_MS`, `MAX_CALL_MS` and `OUTGOING_CALL_GRACE_MS`.
 
 ### Example scores
 
 Ten made-up days, each checked against the actual formula above rather than estimated, showing how very different mixes of streaks, active time and unlocks land on the same score:
 
-| Score | Top 3 streaks | Screen-free | Unlocks | What that day looked like |
+| Score | Top 3 streaks | Active time | Unlocks | What that day looked like |
 | ---: | --- | --- | --- | --- |
-| **100** | 5.0 · 4.0 · 3.0 hrs | 100.0% (0 active) | 15 | Essentially never touched a device all day. Three strong streaks summing to the full 12 hours needed. |
-| **90** | 4.0 · 3.0 · 1.0 hrs | 100.0% (0 active) | 15 | Same discipline, but the streaks only add up to 8 of the 12 hours needed for full marks. |
-| **80** | 4.0 hrs | 100.0% (0 active) | 15 | Just one 4-hour streak that day, but essentially no active time anywhere else. |
-| **70** | 4.0 hrs | 79.2% (5h active) | 15 | Same one streak, but 5 hours of active time scattered through the rest of the day. |
-| **60** | 4.0 hrs | 60.4% (9h 30m active) | 15 | Same one streak, active time now up to 9.5 hours. |
-| **50** | — | 60.4% (9h 30m active) | 15 | No streak worth mentioning, 9.5 hours active spread through the day, unlocks still fine. |
-| **40** | — | 40.6% (14h 15m active) | 15 | Active for nearly 14½ of the day's 24 hours, no meaningful streak, unlocks still under budget. |
-| **30** | — | 40.6% (14h 15m active) | 35 | Same heavy active time, and now 35 unlocks starts costing points too. |
-| **20** | — | 20.8% (19h active) | 35 | Active for 19 of the day's 24 hours, still 35 unlocks. |
-| **10** | — | 20.8% (19h active) | 55 | Same heavy day, and now 55 unlocks — a heavy day on every count. |
+| **100** | 5.0 · 4.0 · 3.0 hrs | 0m | 15 | Essentially never touched a device all day. Three strong streaks summing to the full 12 hours needed. |
+| **90** | 4.0 · 3.0 · 1.0 hrs | 0m | 15 | Same discipline, but the streaks only add up to 8 of the 12 hours needed for full marks. |
+| **80** | 4.0 hrs | 0m | 15 | Just one 4-hour streak that day, but essentially no active time anywhere else. |
+| **70** | 4.0 hrs | 1h 40m | 15 | Same one streak, but 1h40m of active time scattered through the rest of the day. |
+| **60** | 4.0 hrs | 3h 20m | 15 | Same one streak, active time now up to 3h20m. |
+| **50** | — | 3h 20m | 15 | No streak worth mentioning, 3h20m active spread through the day, unlocks still fine. |
+| **40** | — | 5h 00m | 15 | Active for 5 of the day's 24 hours, no meaningful streak, unlocks still under budget. |
+| **30** | — | 5h 00m | 35 | Same active time, and now 35 unlocks starts costing points too. |
+| **20** | — | 6h 40m | 35 | Active for 6h40m of the day, still 35 unlocks. |
+| **10** | — | 6h 40m | 55 | Same heavy day, and now 55 unlocks — a heavy day on every count. |
 
 An unlocks column showing — means there is no phone logging that day, so unlocks default to full marks (this table assumes a phone throughout). A streaks column showing — means the longest streak that day was only a few minutes.
 
