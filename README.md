@@ -9,7 +9,7 @@ There is no server to run. Devices report to a Google Sheet through a tiny Apps 
 ## What it shows
 
 - **Day and Night tiles.** The longest screen-free gap in the current (or most recent) day and night, with a timeline of every interaction and a per-device breakdown alongside the all-devices figure.
-- **Daily score.** A score out of 100 for each calendar day, from your three longest waking streaks, the percentage of the day spent screen-free on every device at once, and phone unlocks.
+- **Daily score.** A score out of 100 for each calendar day, from your three longest waking streaks, total active time across every device merged together, and phone unlocks.
 - **Longest streaks.** Two league tables, your top 5 night streaks and top 5 day streaks. Several can come from the same day.
 - **Monthly averages.** For each month: average score, average longest/2nd-longest/3rd-longest day streak, average longest night streak, average screen-free percentage, average unlocks and average calls.
 
@@ -273,7 +273,7 @@ Exclude the automation app from battery optimisation, or Android will eventually
 A call (see [Loggers](#3-loggers) for the automations this needs) is cut out of the dashboard entirely rather than scored like ordinary phone use:
 
 - **It never breaks a streak.** The quiet time either side of a call bridges into one continuous streak, as if the call had not happened. An outgoing call also excuses the minute before `call_out_start`, so finding the contact and dialling does not count either. Using the phone for anything else after the call ends breaks the streak as normal.
-- **No part of a call counts as active time towards the 50-point screen-free percentage**, whether it happens on its own or in the middle of an otherwise ordinary unlock-to-lock session.
+- **No part of a call counts as active time towards the 50-point screen score**, whether it happens on its own or in the middle of an otherwise ordinary unlock-to-lock session.
 - **An outgoing call always counts as one unlock**, even though answering it leaves no unlock ping of its own. **Answering an incoming call never counts as an unlock.**
 - **The daily score table** shows each day's call count and total time, split by incoming and outgoing. These are informational only and are not scored.
 
