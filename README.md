@@ -101,7 +101,7 @@ Currently `SCORE_UNLOCK_POINTS = 20`, `UNLOCK_FULL = 20`, `UNLOCK_ZERO = 50`: fu
 
 ### When a day is scored
 
-Every device must have been logging for the whole day, and if a phone is present it must have been sending `unlock`/`lock` event types for the whole day. Otherwise the row shows a dash with the reason instead of a score. Today's row shows a score "so far" that changes as the day goes on.
+Every device that existed during that day must have been logging for the whole of it (a device added later doesn't count against earlier days, see [Adding a device](#adding-a-device)), and if a phone is present it must have been sending `unlock`/`lock` event types for the whole day. Otherwise the row shows a dash with the reason instead of a score. Today's row shows a score "so far" that changes as the day goes on.
 
 ### Tuning
 
@@ -283,7 +283,7 @@ A call start with no matching end within `MAX_CALL_MS` (2 hours) is dropped rath
 
 Give the new logger a new `DeviceName` (for example `work_laptop`). It appears on the dashboard automatically as "Work laptop". No changes to the sheet, the Apps Script or the dashboard are needed.
 
-The combined figures only count from when the **last** device started logging, because before that you cannot know whether it was in use. Adding a device therefore restarts the combined streaks, league tables and monthly averages from that point.
+The combined figures only count from when the last of the **original** devices started logging, because before that you cannot know whether it was in use. Devices first seen within `ORIGINAL_DEVICE_WINDOW_MS` (24 hours) of the earliest one are the original set. A device added after that only counts from the **day after** it first logs: earlier days, streaks, league tables and monthly averages are scored on the devices that were live at the time and are never invalidated, and the day it first logs shows "logging started mid-day" because it was only logging for part of it.
 
 A device counts as a phone (screen time from unlock to lock, unlocks, calls) if its name matches `PHONE_LIKE`; anything else is treated as a computer (screen time from pings x `PING_SECONDS`).
 

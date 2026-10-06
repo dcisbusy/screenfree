@@ -441,8 +441,8 @@
 
 <footer>
   <p><strong>How day and night are split.</strong> A streak is the time between two interactions, on any device, and is never cut at a clock boundary <em>unless it&rsquo;s still going</em> at 22:00 or 07:00. It counts as day or night according to the check that <em>starts</em> it: a streak that starts from 22:00 until 06:00 is night, and one that starts from 06:00 until 22:00 is day. So a screen-free 4&ndash;10pm is a day streak, sleep that begins with a 22:56 check is a night streak, a 3am check starts another night streak (breaking it, but staying night), and a check at 6:15am starts a day streak instead. But a streak with no interaction at all is force-cut at 22:00 (day&rarr;night) and again at 07:00 (night&rarr;day), as many times as it keeps going &mdash; so a quiet 8:18pm to 10am becomes a short evening day streak, a full night streak, and a fresh morning day streak, rather than one streak that swallows the whole stretch or gets credited to the wrong day. A streak that already ends at or before a cut, via a real interaction, is never touched by it. Night interruptions are separate bursts of activity between midnight and 06:00. Streaks under 15 minutes are ignored in the tables above.</p>
-  <p><strong>Daily score.</strong> Out of 100: 30 for streaks, 50 for screen time, 20 for unlocks. <strong>Streaks:</strong> your three longest waking streaks that day are summed uncapped and compared against a 12-hour total, so an 8h streak plus a 2h and a 30min one scores the same as three tidy 3-hour streaks &mdash; a big one no longer gets wasted. A streak starting in the 06:00-07:00 grace window is credited from 07:00 for scoring, so checking your phone at 6:30 can never score better than staying quiet until the automatic cutover. Night streaks don&rsquo;t count here, so sleep doesn&rsquo;t inflate the score. <strong>Screen:</strong> computer and phone active spans are merged first (using two devices in the same minute costs once, not twice), then 1 point is lost for every 10 minutes active that day, reaching zero at 500 minutes (8h20m) &mdash; there is no grace period, so any active time at all costs something. The screen-free percentage shown elsewhere on this page is a separate, gentler figure and doesn&rsquo;t translate directly into this score. <strong>Unlocks:</strong> full marks at 20 or fewer, zero at 50. A phone call never breaks a streak, never counts as active time and never counts as an unlock unless it&rsquo;s outgoing. A day is only scored once every device was logging all day and the phone is sending event types.</p>
-  <p>&ldquo;Combined&rdquo; only counts a gap when <em>every</em> device was quiet, from when the last device began logging. Per-device figures are measured within the same day or night period; * = that device started logging partway through it. Monthly averages are worked out per day first &mdash; that day&rsquo;s longest, second-longest and third-longest streak &mdash; and then averaged across the month, leaving out today and any day not fully and validly logged.</p>
+  <p><strong>Daily score.</strong> Out of 100: 30 for streaks, 50 for screen time, 20 for unlocks. <strong>Streaks:</strong> your three longest waking streaks that day are summed uncapped and compared against a 12-hour total, so an 8h streak plus a 2h and a 30min one scores the same as three tidy 3-hour streaks &mdash; a big one no longer gets wasted. A streak starting in the 06:00-07:00 grace window is credited from 07:00 for scoring, so checking your phone at 6:30 can never score better than staying quiet until the automatic cutover. Night streaks don&rsquo;t count here, so sleep doesn&rsquo;t inflate the score. <strong>Screen:</strong> computer and phone active spans are merged first (using two devices in the same minute costs once, not twice), then 1 point is lost for every 10 minutes active that day, reaching zero at 500 minutes (8h20m) &mdash; there is no grace period, so any active time at all costs something. The screen-free percentage shown elsewhere on this page is a separate, gentler figure and doesn&rsquo;t translate directly into this score. <strong>Unlocks:</strong> full marks at 20 or fewer, zero at 50. A phone call never breaks a streak, never counts as active time and never counts as an unlock unless it&rsquo;s outgoing. A day is only scored once every device that existed that day was logging all day and the phone is sending event types.</p>
+  <p>&ldquo;Combined&rdquo; only counts a gap when <em>every</em> device was quiet, from when the last of the original devices began logging; a device added later only counts from the day after it first logs, and never affects earlier days. Per-device figures are measured within the same day or night period; * = that device started logging partway through it. Monthly averages are worked out per day first &mdash; that day&rsquo;s longest, second-longest and third-longest streak &mdash; and then averaged across the month, leaving out today and any day not fully and validly logged.</p>
   <p>Reads directly from your Google Sheet event log. Refreshes automatically every 2 minutes &middot;
   <button id="refresh-btn" type="button">Refresh now</button></p>
 </footer>
@@ -480,6 +480,7 @@
   var OUTGOING_CALL_GRACE_MS = 60000;      // outgoing calls: this long before call_out_start is excused too
   var TICK_MS = 60000;              // phone sessions count as activity, marked once a minute
   var LEAGUE_ROWS = 5;
+  var ORIGINAL_DEVICE_WINDOW_MS = 24 * 3600000;  // devices first seen within this of the earliest one are the original set; any later one is "added"
 
   // Populated by fetchEvents(). Devices are discovered from the sheet's
   // Device column, so a new logger appears here with no code change.
@@ -489,7 +490,8 @@
   var gapTimesByDevice = {};   // pings plus a tick every minute of phone use, for streak maths
   var allGapTimes = [];
   var phoneInfo = {typedStart: null, unlocks: {}, ms: {}, ticks: {}};
-  var combinedStart = null;    // latest first-event across devices
+  var combinedStart = null;    // latest first-event among the original devices (see ORIGINAL_DEVICE_WINDOW_MS)
+  var lateStarts = [];         // first-event times of devices added after the original set
   var eventCount = 0;
   var fetchError = null;
 
@@ -564,10 +566,23 @@
         timesByDevice = byDev;
         devices = Object.keys(byDev).sort();
         eventCount = all.length;
+        // A device added well after the others only counts from its own start
+        // day onward; it never pushes the combined start (or invalidates
+        // earlier days) forward.
         combinedStart = null;
+        lateStarts = [];
+        var earliest = null;
         devices.forEach(function(name){
           var first = byDev[name][0];
-          if(!combinedStart || first > combinedStart) combinedStart = first;
+          if(!earliest || first < earliest) earliest = first;
+        });
+        devices.forEach(function(name){
+          var first = byDev[name][0];
+          if(first - earliest > ORIGINAL_DEVICE_WINDOW_MS){
+            lateStarts.push(first);
+          } else if(!combinedStart || first > combinedStart){
+            combinedStart = first;
+          }
         });
         fetchError = null;
       })
@@ -1250,7 +1265,9 @@
 
       var row = {day: day, isToday: i === 0, reason: null, top: top, computerMs: computerMs, phoneMs: phoneMs, activeMs: activeMs, screenFreeFraction: screenFreeFraction, unlocks: phoneInfo.unlocks[key] || 0, calls: phoneInfo.calls[key] || null};
 
-      if(!combinedStart || combinedStart > day){
+      var dayEnd = new Date(day); dayEnd.setDate(dayEnd.getDate() + 1);
+      var deviceAddedThisDay = lateStarts.some(function(t){ return t >= day && t < dayEnd; });
+      if(!combinedStart || combinedStart > day || deviceAddedThisDay){
         row.reason = "logging started mid-day";
       } else if(hasPhone && (phoneInfo.typedStart === null || phoneInfo.typedStart > day)){
         row.reason = "phone not sending event types yet";
