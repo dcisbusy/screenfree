@@ -10,7 +10,7 @@ There is no server to run. Devices report to a Google Sheet through a tiny Apps 
 
 - **Day and Night tiles.** The longest screen-free gap in the current (or most recent) day and night, with a timeline of every interaction and a per-device breakdown alongside the all-devices figure.
 - **Daily score.** Two scores out of 100 for each calendar day: one for your computers (laptop, worklaptop, ...) and one for your phone, each from that group's own three longest waking streaks and active time, plus unlocks for the phone. A good phone day shows even when work forces a lot of computer time.
-- **Best scores.** Two league tables: your top 5 computer scores and top 5 phone scores, each with its day and points breakdown. Today is left out because it is still changing. Computer scores marked * are covered under [Work-computer asterisk](#work-computer-asterisk).
+- **Best scores.** Two league tables: your top 5 computer scores and top 5 phone scores, each with its day and that device group's total screen time for the day under the score. Today is left out because it is still changing. Computer scores marked * are covered under [Work-computer asterisk](#work-computer-asterisk).
 - **Monthly averages.** For each month: average computers score, average phone score, average longest/2nd-longest/3rd-longest day streak, average longest night streak, average screen-free percentage, average unlocks and average calls.
 
 ## How a streak is measured

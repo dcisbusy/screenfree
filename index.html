@@ -1049,8 +1049,7 @@
       var tr = el("tr");
       tr.appendChild(el("td", "rank", String(i + 1)));
       var scoreCell = el("td", "num", String(g.total) + (g.noWork ? "*" : ""));
-      scoreCell.appendChild(el("div", "cell-sub",
-        "streaks " + g.pts.streak + " \u00b7 screen " + g.pts.screen + (g.pts.unlock !== undefined ? " \u00b7 unlocks " + g.pts.unlock : "")));
+      scoreCell.appendChild(el("div", "cell-sub", "screen time " + fmtDuration(g.activeMs / 60000)));
       tr.appendChild(scoreCell);
       tr.appendChild(el("td", null, fmtDate(r.day)));
       body.appendChild(tr);
