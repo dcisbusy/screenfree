@@ -90,7 +90,7 @@ points = 0                                                             if active
 The two groups use different scales:
 
 - **Computers**: weight 60, zero point `COMPUTER_SCREEN_ZERO_MIN = 500` minutes. Points fall evenly (0.12 per active minute) from 60 at no use to 0 at 500 minutes (8h 20m), which leaves room for a working day at a desk.
-- **Phone**: weight 50, zero point `PHONE_SCREEN_ZERO_MIN = 50` minutes. **1 point is lost for every minute** on the phone, so the score hits 0 at 50 minutes.
+- **Phone**: weight 50, zero point `PHONE_SCREEN_ZERO_MIN = 100` minutes. **1 point is lost for every 2 minutes** on the phone, so the score hits 0 at 100 minutes (1h 40m).
 
 There is no grace period — any active time at all costs something. A phone call is excluded from "active" entirely, just as it is from streaks and unlocks (see [Phone calls](#phone-calls)).
 
@@ -139,10 +139,10 @@ Five made-up days for each score, each checked against the actual formulas above
 | Score | Top 3 streaks | Active time | Unlocks | What that day looked like |
 | ---: | --- | --- | --- | --- |
 | **100** | 5.0 · 4.0 · 3.0 hrs | 0m | 15 | Essentially never touched the phone; three strong streaks summing to the full 12 hours. |
-| **80** | 5.0 · 4.0 · 3.0 hrs | 20m | 15 | The same excellent streaks, but 20 minutes on the phone costs 20 points. |
-| **60** | 3.0 · 2.0 · 1.0 hrs | 25m | 15 | Streaks adding up to 6 hours, and 25 minutes on the phone. |
-| **40** | 2.0 · 1.0 · 1.0 hrs | 30m | 35 | Short streaks, half an hour on the phone, and 35 unlocks now starts costing points too. |
-| **20** | — | 40m | 35 | No streak worth mentioning, 40 minutes on the phone and 35 unlocks. |
+| **80** | 5.0 · 4.0 · 3.0 hrs | 40m | 15 | The same excellent streaks, but 40 minutes on the phone costs 20 points. |
+| **60** | 3.0 · 2.0 · 1.0 hrs | 50m | 15 | Streaks adding up to 6 hours, and 50 minutes on the phone. |
+| **40** | 2.0 · 1.0 · 1.0 hrs | 1h 00m | 35 | Short streaks, an hour on the phone, and 35 unlocks now starts costing points too. |
+| **20** | — | 1h 20m | 35 | No streak worth mentioning, 1h20m on the phone and 35 unlocks. |
 
 A streaks column showing — means the longest streak that day was only a few minutes.
 
