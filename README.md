@@ -9,9 +9,9 @@ There is no server to run. Devices report to a Google Sheet through a tiny Apps 
 ## What it shows
 
 - **Day and Night tiles.** The longest screen-free gap in the current (or most recent) day and night, with a timeline of every interaction and a per-device breakdown alongside the all-devices figure.
-- **Daily score.** A score out of 100 for each calendar day, from your three longest waking streaks, total active time across every device merged together, and phone unlocks.
+- **Daily score.** Two scores out of 100 for each calendar day: one for your computers (laptop, worklaptop, ...) and one for your phone, each from that group's own three longest waking streaks and active time, plus unlocks for the phone. A good phone day shows even when work forces a lot of computer time.
 - **Longest streaks.** Two league tables, your top 5 night streaks and top 5 day streaks. Several can come from the same day.
-- **Monthly averages.** For each month: average score, average longest/2nd-longest/3rd-longest day streak, average longest night streak, average screen-free percentage, average unlocks and average calls.
+- **Monthly averages.** For each month: average computers score, average phone score, average longest/2nd-longest/3rd-longest day streak, average longest night streak, average screen-free percentage, average unlocks and average calls.
 
 ## How a streak is measured
 
@@ -52,42 +52,46 @@ Hours are decimal clock hours, so `21` is 21:00 and `22.5` is 22:30.
 
 ## Daily score
 
-Each calendar day (00:00 to 23:59) gets a score out of 100: streak points + screen points + unlock points, each rounded to a whole number before adding, so the breakdown shown always sums to the total.
+Each calendar day (00:00 to 23:59) gets **two scores, each out of 100**, so a good phone day is visible even on a day of heavy work-computer use:
 
-### 1. Streak points (0–30)
+- **Computers** (every device that isn't a phone): streak points (0-40) + screen points (0-60).
+- **Phone**: streak points (0-30) + screen points (0-50) + unlock points (0-20).
 
-Take the day's three longest **waking streaks** — a streak counts as waking if it starts anywhere from 06:00 up to (but not including) 22:00; one starting from 22:00 up to 06:00 is a night streak and is excluded entirely (see [Splitting day from night](#splitting-day-from-night)). Each streak is clipped so it doesn't run past midnight into the next day. A streak that starts in the 06:00-07:00 grace window is credited from 07:00 instead of its real start — otherwise checking your phone at 6:30 would score better than staying quiet until the automatic 07:00 cutover, since the streak would be measured from an earlier point. This clipping only affects the score; the streak still displays at its true length everywhere else (tiles, league tables, monthly streak averages).
+Each score only looks at its own group's devices: computer streaks are the gaps between computer interactions, phone streaks the gaps between phone interactions, and so on. Every component is rounded to a whole number before adding, so the breakdown shown always sums to the score.
+
+### 1. Streak points (computers 0–40, phone 0–30)
+
+Take that group's three longest **waking streaks** that day — a streak counts as waking if it starts anywhere from 06:00 up to (but not including) 22:00; one starting from 22:00 up to 06:00 is a night streak and is excluded entirely (see [Splitting day from night](#splitting-day-from-night)). Each streak is clipped so it doesn't run past midnight into the next day. A streak that starts in the 06:00-07:00 grace window is credited from 07:00 instead of its real start — otherwise checking your phone at 6:30 would score better than staying quiet until the automatic 07:00 cutover, since the streak would be measured from an earlier point. This clipping only affects the score; the streak still displays at its true length everywhere else (tiles, league tables, monthly streak averages).
 
 The three streaks are **summed uncapped**, not capped individually and then averaged:
 
 ```
 top3 hours = streak1 + streak2 + streak3        // a missing streak counts as 0
 share = min(top3 hours / STREAK_SUM_FULL_H, 1)  // STREAK_SUM_FULL_H = 12
-streak points = round(SCORE_STREAK_POINTS × share)   // SCORE_STREAK_POINTS = 30
+streak points = round(streak weight × share)    // 40 for computers, 30 for phone
 ```
 
 This matters: capping each streak at some length before averaging would mean an 8-hour streak followed by a 2-hour and a 30-minute one scores *worse* than three tidy 3-hour streaks, even though it adds up to more total screen-free time (10.5h vs 9h). Summing uncapped fixes that — both days above reach the same total against the 12-hour bar. A single uninterrupted streak of 12+ hours, with nothing else that day, reaches full marks on its own.
 
-### 2. Screen points (0–50)
+### 2. Screen points (computers 0–60, phone 0–50)
 
-Based on total active time that day (00:00–23:59), across every device merged into one:
+Based on that group's total active time that day (00:00–23:59):
 
 ```
-active = union of every computer ping's PING_SECONDS window and every phone unlock-to-lock
-         session that day, merged across ALL devices so overlapping moments aren't
-         double-counted (using both a laptop and a phone in the same minute still only
-         costs that one minute, not two)
+active = union of the group's activity that day: every computer ping's PING_SECONDS window
+         (computers), or every phone unlock-to-lock session (phone). Overlapping moments
+         aren't double-counted (two computers in use in the same minute cost that one
+         minute, not two)
 active minutes = active time that day, in minutes
-points = SCORE_SCREEN_POINTS                                               if active minutes ≤ 0
-points = SCORE_SCREEN_POINTS × (SCREEN_ZERO_MIN − active minutes) / SCREEN_ZERO_MIN   if 0 < active minutes < SCREEN_ZERO_MIN
-points = 0                                                                  if active minutes ≥ SCREEN_ZERO_MIN
+points = screen weight × (SCREEN_ZERO_MIN − active minutes) / SCREEN_ZERO_MIN    if active minutes < SCREEN_ZERO_MIN
+points = 0                                                                       if active minutes ≥ SCREEN_ZERO_MIN
 ```
 
-Currently `SCORE_SCREEN_POINTS = 50`, `SCREEN_ZERO_MIN = 500`: 1 point lost for every 10 minutes of active time, reaching zero at 500 minutes (8h 20m). There is no grace period — any active time at all costs something. Merging across devices before measuring is what keeps a moment using two devices at once from being counted twice. A phone call is excluded from "active" entirely, just as it is from streaks and unlocks (see [Phone calls](#phone-calls)).
+The screen weight is 60 for computers and 50 for the phone, and `SCREEN_ZERO_MIN = 500` for both: each active minute costs 0.12 points on computers or 0.1 on the phone (1 point per 10 minutes), reaching zero at 500 minutes (8h 20m). There is no grace period — any active time at all costs something. A phone call is excluded from "active" entirely, just as it is from streaks and unlocks (see [Phone calls](#phone-calls)).
 
-The dashboard separately shows a **screen-free percentage** (active time as a share of the full 24-hour day) on the Daily score and Monthly averages tables. That figure is informational and uses a different, gentler scale from the one above — the two numbers will not simply multiply into each other.
+The dashboard separately shows a **screen-free percentage** (active time across *all* devices merged, as a share of the full 24-hour day) in the Daily score and Monthly averages tables. That figure is informational and uses a different, gentler scale from the scores above — the numbers will not simply multiply into each other.
 
-### 3. Unlock points (0–20)
+### 3. Unlock points (phone only, 0–20)
 
 Unlocks = count of `unlock` events that actually **start a new phone session** — a repeat `unlock` ping received while a session is already open (some automation setups fire it more than once per pickup) does not count again.
 
@@ -97,40 +101,47 @@ points = SCORE_UNLOCK_POINTS × (UNLOCK_ZERO − unlocks) / (UNLOCK_ZERO − UNL
 points = 0                                                                       if unlocks ≥ UNLOCK_ZERO
 ```
 
-Currently `SCORE_UNLOCK_POINTS = 20`, `UNLOCK_FULL = 20`, `UNLOCK_ZERO = 50`: full marks at 20 unlocks or fewer, zero at 50 or more. If there is no phone at all, this defaults to full marks.
+Currently `SCORE_UNLOCK_POINTS = 20`, `UNLOCK_FULL = 20`, `UNLOCK_ZERO = 50`: full marks at 20 unlocks or fewer, zero at 50 or more. The computers score has no unlock component.
 
 ### When a day is scored
 
-Every device that existed during that day must have been logging for the whole of it (a device added later doesn't count against earlier days, see [Adding a device](#adding-a-device)), and if a phone is present it must have been sending `unlock`/`lock` event types for the whole day. Otherwise the row shows a dash with the reason instead of a score. Today's row shows a score "so far" that changes as the day goes on.
+Each score is given independently. A score appears once every device **in its group** that existed during that day was logging for the whole of it (a device added later doesn't count against earlier days, and one added that day is ignored for that day — see [Adding a device](#adding-a-device)); the phone score also needs the phone to have been sending `unlock`/`lock` event types for the whole day. Otherwise that cell shows a dash with the reason instead of a score. Because the two are independent, a day can have one score and not the other. Today's row shows scores "so far" that change as the day goes on.
 
 ### Tuning
 
-All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_STREAK_POINTS`, `SCORE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_SUM_FULL_H`, `SCREEN_ZERO_MIN`, `UNLOCK_FULL`, `UNLOCK_ZERO`, `MAX_PHONE_SESSION_MS`, `MAX_CALL_MS` and `OUTGOING_CALL_GRACE_MS`.
+All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_COMPUTER_STREAK_POINTS`, `SCORE_COMPUTER_SCREEN_POINTS`, `SCORE_PHONE_STREAK_POINTS`, `SCORE_PHONE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_SUM_FULL_H`, `SCREEN_ZERO_MIN`, `UNLOCK_FULL`, `UNLOCK_ZERO`, `MAX_PHONE_SESSION_MS`, `MAX_CALL_MS` and `OUTGOING_CALL_GRACE_MS`.
 
 ### Example scores
 
-Ten made-up days, each checked against the actual formula above rather than estimated, showing how very different mixes of streaks, active time and unlocks land on the same score:
+Five made-up days for each score, each checked against the actual formulas above rather than estimated, showing how different mixes of streaks and active time land on the same score.
+
+**Computers**
+
+| Score | Top 3 streaks | Active time | What that day looked like |
+| ---: | --- | --- | --- |
+| **100** | 5.0 · 4.0 · 3.0 hrs | 0m | No computer use at all; three strong streaks summing to the full 12 hours needed. |
+| **80** | 4.0 · 3.0 · 1.0 hrs | 1h 00m | An hour on a computer, streaks adding up to 8 of the 12 hours. |
+| **60** | 3.0 · 2.0 · 1.0 hrs | 2h 50m | A light day at a desk, with streaks adding up to 6 hours. |
+| **40** | 2.0 · 1.0 hrs | 4h 10m | A moderate working day with only a couple of real breaks. |
+| **20** | — | 5h 30m | A heavy day at the computer with no streak worth mentioning. |
+
+**Phone**
 
 | Score | Top 3 streaks | Active time | Unlocks | What that day looked like |
 | ---: | --- | --- | --- | --- |
-| **100** | 5.0 · 4.0 · 3.0 hrs | 0m | 15 | Essentially never touched a device all day. Three strong streaks summing to the full 12 hours needed. |
-| **90** | 4.0 · 3.0 · 1.0 hrs | 0m | 15 | Same discipline, but the streaks only add up to 8 of the 12 hours needed for full marks. |
-| **80** | 4.0 hrs | 0m | 15 | Just one 4-hour streak that day, but essentially no active time anywhere else. |
-| **70** | 4.0 hrs | 1h 40m | 15 | Same one streak, but 1h40m of active time scattered through the rest of the day. |
-| **60** | 4.0 hrs | 3h 20m | 15 | Same one streak, active time now up to 3h20m. |
-| **50** | — | 3h 20m | 15 | No streak worth mentioning, 3h20m active spread through the day, unlocks still fine. |
-| **40** | — | 5h 00m | 15 | Active for 5 of the day's 24 hours, no meaningful streak, unlocks still under budget. |
-| **30** | — | 5h 00m | 35 | Same active time, and now 35 unlocks starts costing points too. |
-| **20** | — | 6h 40m | 35 | Active for 6h40m of the day, still 35 unlocks. |
-| **10** | — | 6h 40m | 55 | Same heavy day, and now 55 unlocks — a heavy day on every count. |
+| **100** | 5.0 · 4.0 · 3.0 hrs | 0m | 15 | Essentially never touched the phone; three strong streaks summing to the full 12 hours. |
+| **80** | 4.0 · 3.0 · 1.0 hrs | 1h 40m | 15 | Streaks adding up to 8 of the 12 hours, and 1h40m on the phone. |
+| **60** | 3.0 · 2.0 · 1.0 hrs | 4h 10m | 15 | Streaks adding up to 6 hours, and over 4 hours on the phone. |
+| **40** | 2.0 · 1.0 · 1.0 hrs | 5h 00m | 35 | Short streaks, 5 hours on the phone, and 35 unlocks now starts costing points too. |
+| **20** | — | 6h 40m | 35 | No streak worth mentioning, 6h40m on the phone and 35 unlocks. |
 
-An unlocks column showing — means there is no phone logging that day, so unlocks default to full marks (this table assumes a phone throughout). A streaks column showing — means the longest streak that day was only a few minutes.
+A streaks column showing — means the longest streak that day was only a few minutes.
 
 ## Monthly averages
 
-Everything in this table is computed **per day first, then averaged across the month** -- never as a single pool of numbers drawn from the whole month at once. Concretely, it takes the same per-day figures the Daily score table shows (that day's top 3 streaks, screen-free percentage, unlocks, calls, score) for every day in the month, then averages each column down.
+Everything in this table is computed **per day first, then averaged across the month** -- never as a single pool of numbers drawn from the whole month at once. Concretely, it takes the same per-day figures the Daily score table shows (that day's top 3 streaks, screen-free percentage, unlocks, calls, computers and phone scores) for every day in the month, then averages each column down.
 
-- **Avg score.** The average of `total` over days that were actually scored (see [When a day is scored](#when-a-day-is-scored)).
+- **Avg computers / Avg phone.** The average of each daily score over the days it was actually scored (see [When a day is scored](#when-a-day-is-scored)). The two are averaged separately, so they can cover a different number of days.
 - **Avg streaks (1st · 2nd · 3rd).** Three separate averages: the average of each day's *longest* streak, the average of each day's *second-longest*, and the average of each day's *third-longest*. A day missing a rank (fewer than three streaks that day) is left out of *that rank's* average rather than counted as zero, so each of the three numbers has its own count of days behind it. This display average is unrelated to how streak points are scored (see [Streak points](#1-streak-points-030)), which sums the three uncapped rather than ranking them separately.
 - **Avg night streak.** The average of each finished night's longest streak. Unlike the day-streak ranks, there is only one relevant figure per night.
 - **Avg screen-free, avg unlocks, avg calls.** The plain average of each day's figure, same source as the Daily score table's columns.
@@ -283,7 +294,7 @@ A call start with no matching end within `MAX_CALL_MS` (2 hours) is dropped rath
 
 Give the new logger a new `DeviceName` (for example `work_laptop`). It appears on the dashboard automatically as "Work laptop". No changes to the sheet, the Apps Script or the dashboard are needed.
 
-The combined figures only count from when the last of the **original** devices started logging, because before that you cannot know whether it was in use. Devices first seen within `ORIGINAL_DEVICE_WINDOW_MS` (24 hours) of the earliest one are the original set. A device added after that only counts from the **day after** it first logs: earlier days, streaks, league tables and monthly averages are scored on the devices that were live at the time and are never invalidated, and the day it first logs shows "logging started mid-day" because it was only logging for part of it.
+The combined figures only count from when the last of the **original** devices started logging, because before that you cannot know whether it was in use. Devices first seen within `ORIGINAL_DEVICE_WINDOW_MS` (24 hours) of the earliest one are the original set. A device added after that is ignored for scoring on the day it first logs (it was only logging for part of that day, so the day is scored on the other devices alone) and counts from the day after. Earlier days, streaks, league tables and monthly averages are scored on the devices that were live at the time and are never invalidated. This day-of-arrival rule applies to computers; a second phone added later isn't specially handled.
 
 A device counts as a phone (screen time from unlock to lock, unlocks, calls) if its name matches `PHONE_LIKE`; anything else is treated as a computer (screen time from pings x `PING_SECONDS`).
 
