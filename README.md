@@ -8,6 +8,7 @@ There is no server to run. Devices report to a Google Sheet through a tiny Apps 
 
 ## What it shows
 
+- **Streaks.** A live screen-free counter and daily-goal streak for the phone and for the computers, plus personal records. See [Streaks and goals](#streaks-and-goals).
 - **Day and Night tiles.** The longest screen-free gap in the current (or most recent) day and night, with a timeline of every interaction and a per-device breakdown alongside the all-devices figure.
 - **Daily score.** Two scores out of 100 for each calendar day: one for your computers (laptop, worklaptop, ...) and one for your phone, each from that group's own three longest waking streaks and active time, plus unlocks for the phone. A good phone day shows even when work forces a lot of computer time.
 - **Best scores.** Two league tables: your top 5 computer scores and top 5 phone scores, each with its day and that device group's total screen time for the day under the score. Today is left out because it is still changing. Computer scores marked * are covered under [Work-computer asterisk](#work-computer-asterisk).
@@ -49,6 +50,16 @@ The rules are constants near the top of the script in `index.html`:
 | `PHONE_LIKE` | `/phone\|mobile\|tablet/i` | Device names matching this show pickups instead of active time |
 
 Hours are decimal clock hours, so `21` is 21:00 and `22.5` is 22:30.
+
+## Streaks and goals
+
+The Streaks section at the top of the page is built around the original mechanic of not breaking the streak, with the scores as a secondary view.
+
+**Live counters.** One for the phone and one for the computers, counting up each second from the last interaction on that group's devices. It shows the app's current streak, so it is labelled day or night and a night streak flips to a fresh day streak at the 07:00 cut (see [Splitting day from night](#splitting-day-from-night)). A bar fills towards the daily goal, and a line shows how long until you beat your personal best of the same kind, or "New personal best!". Looking at the page on a device counts as using it, so read the phone counter from a computer and the computer counter from your phone. The counters are only as fresh as the last data load, which is within 2 minutes of your last touch.
+
+**Daily goal.** A day meets the goal if that group's longest waking streak is at least `GOAL_STREAK_H` hours (default 3). This uses the same waking streak as the daily score, so the 06:00-07:00 grace window and the midnight clip apply. The goal streak counts consecutive days the goal was met, ending yesterday or today. Today not being met yet doesn't break it, but a finished day that missed, or that can't be scored (see [When a day is scored](#when-a-day-is-scored)), does. Underneath is the best run ever, the last 7 finished days as a fraction, and a strip of the last `GOAL_STRIP_DAYS` days: filled for met, hollow for missed, dashed for not scored, ringed for today.
+
+**Personal records.** The longest finished day streak and night streak for the phone, the computers and all devices combined, over all time, this month (from the 1st) and this week (from Monday), each with when it started. Streaks are shown at their true length.
 
 ## Daily score
 
@@ -114,7 +125,7 @@ Each score is given independently. A score appears once every device **in its gr
 
 ### Tuning
 
-All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_COMPUTER_STREAK_POINTS`, `SCORE_COMPUTER_SCREEN_POINTS`, `SCORE_PHONE_STREAK_POINTS`, `SCORE_PHONE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_SUM_FULL_H`, `COMPUTER_SCREEN_ZERO_MIN`, `PHONE_SCREEN_ZERO_MIN`, `UNLOCK_FULL`, `UNLOCK_ZERO`, `MAX_PHONE_SESSION_MS`, `MAX_CALL_MS` and `OUTGOING_CALL_GRACE_MS`, plus `WORK_DEVICE_LIKE` and `WORK_DAYS` for the asterisk below.
+All of the constants above are named exactly as they appear near the top of the script in `index.html`: `SCORE_COMPUTER_STREAK_POINTS`, `SCORE_COMPUTER_SCREEN_POINTS`, `SCORE_PHONE_STREAK_POINTS`, `SCORE_PHONE_SCREEN_POINTS`, `SCORE_UNLOCK_POINTS`, `STREAK_SUM_FULL_H`, `COMPUTER_SCREEN_ZERO_MIN`, `PHONE_SCREEN_ZERO_MIN`, `UNLOCK_FULL`, `UNLOCK_ZERO`, `MAX_PHONE_SESSION_MS`, `MAX_CALL_MS` and `OUTGOING_CALL_GRACE_MS`, plus `WORK_DEVICE_LIKE` and `WORK_DAYS` for the asterisk below. The goal constants `GOAL_STREAK_H` and `GOAL_STRIP_DAYS` are covered under [Streaks and goals](#streaks-and-goals).
 
 ### Work-computer asterisk
 

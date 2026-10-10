@@ -229,6 +229,51 @@
   }
 
   section.block{ margin-bottom:32px; }
+  .goal-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+    margin-bottom:18px;
+    align-items:start;
+  }
+  @media (max-width:560px){
+    .goal-grid{ grid-template-columns:1fr; }
+  }
+  .bar{
+    height:8px;
+    border-radius:999px;
+    background:var(--surface-2);
+    border:1px solid var(--line);
+    overflow:hidden;
+    margin:2px 0 6px;
+  }
+  .bar-fill{ height:100%; width:0; border-radius:999px; }
+  .tile.day .bar-fill{ background:var(--day); }
+  .tile.night .bar-fill{ background:var(--night); }
+  .goal-note{
+    font-size:0.8rem;
+    color:var(--text-muted);
+    min-height:1.2em;
+    margin-bottom:6px;
+  }
+  .goal-chain{
+    border-top:1px solid var(--line);
+    padding-top:12px;
+    margin-top:12px;
+  }
+  .strip{ display:flex; gap:4px; flex-wrap:wrap; }
+  .strip span{
+    width:14px;
+    height:14px;
+    border-radius:50%;
+    border:2px solid var(--line);
+    box-sizing:border-box;
+  }
+  .strip span.skip{ border-style:dashed; opacity:0.6; }
+  .strip span.today{ box-shadow:0 0 0 2px var(--surface), 0 0 0 3px var(--text-muted); }
+  .tile.day .strip span.hit{ background:var(--day); border-color:var(--day); }
+  .tile.night .strip span.hit{ background:var(--night); border-color:var(--night); }
+
   .streak-lists{
     display:grid;
     grid-template-columns:1fr 1fr;
@@ -358,6 +403,56 @@
 
 <div id="status">Loading events&hellip;</div>
 
+<section class="block">
+  <h2>Streaks</h2>
+  <p class="hint">Live counters for each device group, a daily goal of one waking streak of 3 hours or more, and your records. Looking at this page counts as using that device, so check the phone counter from a computer and the computer counter from your phone. Counters catch up within 2 minutes of your last touch.</p>
+  <div class="goal-grid">
+  <div class="tile night" id="goal-phone" hidden>
+    <div class="tile-head">
+      <span class="tile-label">Phone</span>
+      <span class="pill" id="goal-phone-pill">&mdash;</span>
+    </div>
+    <div class="metric-label">Screen-free right now</div>
+    <div class="score"><span id="goal-phone-time">&mdash;</span></div>
+    <div class="tile-sub" id="goal-phone-since">&nbsp;</div>
+    <div class="bar"><div class="bar-fill" id="goal-phone-bar"></div></div>
+    <div class="goal-note" id="goal-phone-goal">&nbsp;</div>
+    <div class="goal-note" id="goal-phone-best">&nbsp;</div>
+    <div class="goal-chain">
+      <div class="metric-label">Daily goal streak</div>
+      <div class="score"><span id="goal-phone-chain">&mdash;</span><span class="score-unit" id="goal-phone-chain-unit">days</span></div>
+      <div class="tile-sub" id="goal-phone-chain-sub">&nbsp;</div>
+      <div class="strip" id="goal-phone-strip"></div>
+    </div>
+  </div>
+  <div class="tile day" id="goal-computers" hidden>
+    <div class="tile-head">
+      <span class="tile-label">Computers</span>
+      <span class="pill" id="goal-computers-pill">&mdash;</span>
+    </div>
+    <div class="metric-label">Screen-free right now</div>
+    <div class="score"><span id="goal-computers-time">&mdash;</span></div>
+    <div class="tile-sub" id="goal-computers-since">&nbsp;</div>
+    <div class="bar"><div class="bar-fill" id="goal-computers-bar"></div></div>
+    <div class="goal-note" id="goal-computers-goal">&nbsp;</div>
+    <div class="goal-note" id="goal-computers-best">&nbsp;</div>
+    <div class="goal-chain">
+      <div class="metric-label">Daily goal streak</div>
+      <div class="score"><span id="goal-computers-chain">&mdash;</span><span class="score-unit" id="goal-computers-chain-unit">days</span></div>
+      <div class="tile-sub" id="goal-computers-chain-sub">&nbsp;</div>
+      <div class="strip" id="goal-computers-strip"></div>
+    </div>
+  </div>
+  </div>
+  <h3 class="sub-h">Personal records</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Longest streak</th><th>All time</th><th>This month</th><th>This week</th></tr></thead>
+      <tbody id="records-body"></tbody>
+    </table>
+  </div>
+</section>
+
 <div class="tiles">
   <div class="tile day" id="tile-day">
     <div class="tile-head">
@@ -443,6 +538,7 @@
 
 <footer>
   <p><strong>How day and night are split.</strong> A streak is the time between two interactions, on any device, and is never cut at a clock boundary <em>unless it&rsquo;s still going</em> at 22:00 or 07:00. It counts as day or night according to the check that <em>starts</em> it: a streak that starts from 22:00 until 06:00 is night, and one that starts from 06:00 until 22:00 is day. So a screen-free 4&ndash;10pm is a day streak, sleep that begins with a 22:56 check is a night streak, a 3am check starts another night streak (breaking it, but staying night), and a check at 6:15am starts a day streak instead. But a streak with no interaction at all is force-cut at 22:00 (day&rarr;night) and again at 07:00 (night&rarr;day), as many times as it keeps going &mdash; so a quiet 8:18pm to 10am becomes a short evening day streak, a full night streak, and a fresh morning day streak, rather than one streak that swallows the whole stretch or gets credited to the wrong day. A streak that already ends at or before a cut, via a real interaction, is never touched by it. Night interruptions are separate bursts of activity between midnight and 06:00. Streaks under 15 minutes are ignored in the monthly streak averages.</p>
+  <p><strong>Streaks and goals.</strong> The live counters show how long since you last used each device group, as the app&rsquo;s current day or night streak, so a night streak flips to a fresh day streak at 07:00. The daily goal is met by one waking streak of 3 hours or more on that group&rsquo;s own devices; the goal streak counts consecutive days you met it. Today being unfinished never breaks it, but a missed or unscorable day does. Personal records are the longest finished day and night streaks, over all time, this month (from the 1st) and this week (from Monday).</p>
   <p><strong>Daily score.</strong> Two scores, each out of 100, so a good phone day shows even on a day of heavy work-computer use. <strong>Computers</strong> (laptop, worklaptop and any other non-phone device): 40 for streaks, 60 for screen time. <strong>Phone:</strong> 30 for streaks, 50 for screen time, 20 for unlocks. Each score only looks at its own devices. <strong>Streaks:</strong> that group&rsquo;s three longest waking streaks that day are summed uncapped and compared against a 12-hour total, so an 8h streak plus a 2h and a 30min one scores the same as three tidy 3-hour streaks &mdash; a big one no longer gets wasted. A streak starting in the 06:00-07:00 grace window is credited from 07:00 for scoring, so checking your phone at 6:30 can never score better than staying quiet until the automatic cutover. Night streaks don&rsquo;t count here, so sleep doesn&rsquo;t inflate the score. <strong>Screen:</strong> that group&rsquo;s active spans are merged first (two computers in use in the same minute cost once, not twice), then points are lost for active time that day &mdash; computers fall evenly from 60 to zero over 500 minutes (8h20m), the phone loses 1 point for every 2 minutes and hits zero at 100 minutes (1h40m) &mdash; there is no grace period, so any active time at all costs something. The screen-free percentage shown in the table is a separate figure across all devices and doesn&rsquo;t translate directly into either score. <strong>Unlocks:</strong> full marks at 20 or fewer, zero at 50. A phone call never breaks a streak, never counts as active time and never counts as an unlock unless it&rsquo;s outgoing. A score is only given once every device in its group that existed that day was logging all day (and, for the phone, was sending event types). A computer added later is ignored on the day it first logged &mdash; that day is scored on the other devices alone &mdash; and counts from the next day. A computer score with an asterisk (*) is a Monday&ndash;Thursday on which the worklaptop logged nothing that counted, so it leaves out your work computer use. The Best scores tables list the five highest finished days for each score (today is left out).</p>
   <p>&ldquo;Combined&rdquo; only counts a gap when <em>every</em> device was quiet, from when the last of the original devices began logging; a device added later never affects earlier days, and is ignored on the day it first logs. Per-device figures are measured within the same day or night period; * = that device started logging partway through it. Monthly averages are worked out per day first &mdash; that day&rsquo;s longest, second-longest and third-longest streak &mdash; and then averaged across the month, leaving out today and any day not fully and validly logged.</p>
   <p>Reads directly from your Google Sheet event log. Refreshes automatically every 2 minutes &middot;
@@ -489,6 +585,8 @@
   var OUTGOING_CALL_GRACE_MS = 60000;      // outgoing calls: this long before call_out_start is excused too
   var TICK_MS = 60000;              // phone sessions count as activity, marked once a minute
   var LEAGUE_ROWS = 5;
+  var GOAL_STREAK_H = 3;               // daily goal: one waking streak of at least this many hours
+  var GOAL_STRIP_DAYS = 14;            // days shown in each goal strip
   var ORIGINAL_DEVICE_WINDOW_MS = 24 * 3600000;  // devices first seen within this of the earliest one are the original set; any later one is "added"
 
   // Populated by fetchEvents(). Devices are discovered from the sheet's
@@ -1443,12 +1541,168 @@
     });
   }
 
+  // --- streak goals, live counters and records --------------------------
+
+  var GOAL_MS = GOAL_STREAK_H * 3600000;
+  var liveState = {};   // "phone" | "computers" -> the open streak, or null
+
+  function fmtClock(ms){
+    var t = Math.floor(ms / 1000);
+    var h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), sec = t % 60;
+    return h + ":" + String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
+  }
+
+  function put(id, text){ document.getElementById(id).textContent = text; }
+
+  // Longest finished streak of one kind (day or night) that started on or
+  // after `from`, or null.
+  function bestIn(gaps, night, from){
+    var best = null;
+    gaps.forEach(function(g){
+      if(g.open || g.night !== night || g.start < from) return;
+      if(!best || g.ms > best.ms) best = g;
+    });
+    return best;
+  }
+
+  // The daily goal is met by one waking streak of GOAL_STREAK_H hours or more
+  // in that group's own devices.
+  function goalMet(group){
+    return !group.reason && group.top.length > 0 && group.top[0] >= GOAL_MS;
+  }
+
+  // rows are newest first. Today not being met yet doesn't break the chain
+  // -- the day isn't over -- but an unmet finished day, or one that can't be
+  // scored, does.
+  function goalChain(rows, kind){
+    var todayDone = rows.length > 0 && rows[0].isToday && goalMet(rows[0][kind]);
+    var i = (rows.length > 0 && rows[0].isToday && !todayDone) ? 1 : 0;
+    var current = 0;
+    for(; i < rows.length; i++){
+      if(!goalMet(rows[i][kind])) break;
+      current++;
+    }
+    var best = 0, run = 0;
+    for(var j = rows.length - 1; j >= 0; j--){
+      if(goalMet(rows[j][kind])){ run++; if(run > best) best = run; } else { run = 0; }
+    }
+    var recent = rows.filter(function(r){ return !r.isToday && !r[kind].reason; }).slice(0, 7);
+    var hits = recent.filter(function(r){ return goalMet(r[kind]); }).length;
+    var strip = rows.slice(0, GOAL_STRIP_DAYS).reverse().map(function(r){
+      return {day: r.day, isToday: r.isToday, state: r[kind].reason ? "skip" : goalMet(r[kind]) ? "hit" : "miss"};
+    });
+    return {current: current, best: best, hits: hits, of: recent.length, strip: strip, todayDone: todayDone};
+  }
+
+  // Redraws one live counter from its stored open streak. Called every
+  // second, so it only touches text and the bar.
+  function paintLive(kind){
+    var st = liveState[kind];
+    var id = "goal-" + kind + "-";
+    if(!st){
+      put(id + "time", "\u2014");
+      put(id + "pill", "\u2014");
+      put(id + "since", "");
+      put(id + "goal", "");
+      put(id + "best", "");
+      document.getElementById(id + "bar").style.width = "0";
+      return;
+    }
+    var now = new Date();
+    var elapsed = Math.max(0, now - st.start);
+    put(id + "time", fmtClock(elapsed));
+    put(id + "pill", st.night ? "Night streak" : "Day streak");
+    put(id + "since", "since " + fmtWhen(st.start, now));
+
+    var bar = document.getElementById(id + "bar");
+    if(st.night){
+      bar.style.width = "0";
+      put(id + "goal", "The daily goal counts waking streaks");
+    } else {
+      bar.style.width = Math.min(elapsed / GOAL_MS, 1) * 100 + "%";
+      put(id + "goal", elapsed >= GOAL_MS
+        ? "Goal hit: " + GOAL_STREAK_H + "h+ waking streak"
+        : (st.goalDone ? "Today's goal already done" : fmtDuration(Math.ceil((GOAL_MS - elapsed) / 60000)) + " to today's goal"));
+    }
+
+    if(!st.best){
+      put(id + "best", "No finished " + (st.night ? "night" : "day") + " streaks yet");
+    } else if(elapsed >= st.best.ms){
+      put(id + "best", "New personal best!");
+    } else {
+      put(id + "best", fmtDuration(Math.ceil((st.best.ms - elapsed) / 60000)) + " to beat your best (" +
+        fmtHours(st.best.ms / 3600000) + " hrs, " + fmtDate(st.best.start) + ")");
+    }
+  }
+
+  function renderGoals(daily, now){
+    var present = {phone: daily.hasPhone, computers: daily.hasComputers};
+    var gapsBy = {
+      phone: present.phone ? buildGaps(scoringTimes("phone"), now) : [],
+      computers: present.computers ? buildGaps(scoringTimes("computers"), now) : [],
+      all: buildGaps(scoringTimes("all"), now)
+    };
+    var epoch = new Date(0);
+    liveState = {};
+
+    ["phone", "computers"].forEach(function(kind){
+      var card = document.getElementById("goal-" + kind);
+      card.hidden = !present[kind];
+      if(!present[kind]) return;
+      var id = "goal-" + kind + "-";
+      var chain = goalChain(daily.rows, kind);
+
+      var gaps = gapsBy[kind];
+      var last = gaps.length ? gaps[gaps.length - 1] : null;
+      liveState[kind] = (last && last.open)
+        ? {start: last.start, night: last.night, best: bestIn(gaps, last.night, epoch), goalDone: chain.todayDone}
+        : null;
+
+      put(id + "chain", String(chain.current));
+      put(id + "chain-unit", chain.current === 1 ? "day" : "days");
+      put(id + "chain-sub", (chain.todayDone ? "Today's goal done" : "Today's goal still open") +
+        " \u00b7 best " + chain.best + " \u00b7 last 7 days " + (chain.of ? chain.hits + "/" + chain.of : "\u2014"));
+
+      var strip = document.getElementById(id + "strip");
+      strip.innerHTML = "";
+      chain.strip.forEach(function(d){
+        var dot = el("span", d.state + (d.isToday ? " today" : ""));
+        dot.title = fmtDate(d.day) + (d.state === "hit" ? " \u2013 goal met" : d.state === "miss" ? " \u2013 no " + GOAL_STREAK_H + "h streak" : " \u2013 not scored");
+        strip.appendChild(dot);
+      });
+
+      paintLive(kind);
+    });
+
+    var weekStart = startOfDay(now);
+    weekStart.setDate(weekStart.getDate() - (weekStart.getDay() + 6) % 7);
+    var monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    var body = document.getElementById("records-body");
+    body.innerHTML = "";
+    [false, true].forEach(function(night){
+      [["phone", "Phone"], ["computers", "Computers"], ["all", "All devices"]].forEach(function(k){
+        if(k[0] !== "all" && !present[k[0]]) return;
+        var tr = el("tr");
+        tr.appendChild(el("td", null, (night ? "Night" : "Day") + " \u00b7 " + k[1]));
+        [epoch, monthStart, weekStart].forEach(function(from){
+          var b = bestIn(gapsBy[k[0]], night, from);
+          var td = el("td", "num", b ? fmtHours(b.ms / 3600000) + " hrs" : "\u2014");
+          if(b) td.appendChild(el("div", "cell-sub", fmtDate(b.start) + " " + fmtTime(b.start)));
+          tr.appendChild(td);
+        });
+        body.appendChild(tr);
+      });
+    });
+  }
+
   function tickClock(){
     var now = new Date();
     document.getElementById("clock").textContent =
       now.getHours().toString().padStart(2,"0") + ":" +
       now.getMinutes().toString().padStart(2,"0") + ":" +
       now.getSeconds().toString().padStart(2,"0");
+    paintLive("phone");
+    paintLive("computers");
   }
 
   function render(){
@@ -1474,6 +1728,7 @@
     renderTile("day", latest.day, now, analysis.times);
     renderTile("night", latest.night, now, analysis.times);
     var daily = computeDailyRows(now, Infinity);
+    renderGoals(daily, now);
     renderScore(daily);
     renderLeague(daily);
     renderMonthly(analysis, daily);
